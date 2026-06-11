@@ -6,7 +6,7 @@
 
 **最新更新：v1.02**
 
-**v1.02 更新**：新增 kimi-skill-creator（Kimi Code 原生版）；grok/mimo 两版大幅重构——新增 Description Trap（description 总结 workflow 会导致模型走捷径跳过 body）、Skill 类型分类（Discipline/Technique/Pattern/Reference 四种框架）、Bulletproofing 合理化表格、7 步评估 Pipeline、5 Common Failures 排障手册。行数不增反降：grok 309→270，mimo 370→248。
+**v1.02 更新**：新增 kimi-skill-creator（Kimi Code 定制版）；grok/mimo 两版大幅重构—，新增 Description Trap（description 总结 workflow 会导致模型走捷径跳过 body）、Skill 类型分类（Discipline/Technique/Pattern/Reference 四种框架）、Bulletproofing 合理化表格、7 步评估 Pipeline、5 Common Failures 排障手册。行数不增反降：grok 309→270，mimo 370→248。
 
 | 版本 | 目录 | 行数 | 平台 | 特色 |
 |------|------|------|------|------|
