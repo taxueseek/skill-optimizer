@@ -1,6 +1,6 @@
 # Skill Optimizer
 
-> 让 AI Agent 的 Skill 从「能用」变成「好用」。
+> 让 AI Agent 的 Skill 编写优化过程从「能用」变成「好用」。本项目类似 Claude Code 自带的 skill-creator ，但针对 Grok Build、Kimi Code、MiMo Code 针对性的优化了，确保在每一个适配的平台上都能发挥出最大的作用。
 
 一套跨平台的 **Skill 设计、测试、优化工具包**。包含三个平台专用版本：
 
@@ -24,9 +24,9 @@ Skill Optimizer 的灵感来源于 Claude Code 自带的 `skill-creator`。
 
 在分别使用 Grok Build、Kimi Code 和 MiMo Code 的过程中，我们发现这些 Agent 内置的 skill 创建引导（或类似功能的 skill）水平参差不齐——优化和测试 skill 的工具相当简陋，导致一个 skill 写出来之后需要反复返工：触发不准、内容冗余、缺乏量化验证手段。
 
-于是我们决定：**不做通用指南，针对每个 Agent 的实际环境、官方文档和工具接口，分别开发专用版本。** 每个版本都用该平台的原生工具实现完整的「创建 → 测试 → 评估 → 优化」闭环，而不是写一层适配层去抹平差异。
+于是我决定：**不做通用指南，针对每个 Agent 的实际环境、官方文档和工具接口，分别开发专用版本。** 每个版本都用该平台的原生工具实现完整的「创建 → 测试 → 评估 → 优化」闭环，而不是写一层适配层去抹平差异。
 
-这就是 Skill Optimizer 的定位：**不是又一个 skill 教程，而是三个可以直接跑起来的 skill 工程流水线。**
+这就是 Skill Optimizer 的定位：**不是一个 skill 教程，只有三个可以直接跑起来的 skill 工程流水线。**
 
 ---
 
