@@ -114,7 +114,7 @@ v1.0 发布后，基于实际使用反馈和 Claude Code 版 skill-creator 的�
 - 深度适配 Grok 的 `spawn_subagent` 原生能力
 - 内置 `agents/`（grader、comparator、analyzer）+ `scripts/`（aggregate_benchmark、quick_validate、eval-viewer）
 - `references/schemas.md` — 完整 JSON Schema 定义
-- Description Optimization 指定 `LongCat-2.0-Preview` 模型，60/40 train/test split
+- Description Optimization 可指定模型，60/40 train/test split
 
 ### kimi-skill-creator（Kimi Code）
 
