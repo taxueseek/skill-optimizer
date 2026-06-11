@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS Store
+*.skill
+evals/
+iteration-*/
+workspace/
