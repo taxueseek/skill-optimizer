@@ -4,6 +4,10 @@
 
 一套跨平台的 **Skill 设计、测试、优化工具包**。包含三个平台专用版本：
 
+**最新更新：v1.02**
+
+**v1.02 更新**：新增 kimi-skill-creator（Kimi Code 原生版）；grok/mimo 两版大幅重构——新增 Description Trap（description 总结 workflow 会导致模型走捷径跳过 body）、Skill 类型分类（Discipline/Technique/Pattern/Reference 四种框架）、Bulletproofing 合理化表格、7 步评估 Pipeline、5 Common Failures 排障手册。行数不增反降：grok 309→270，mimo 370→248。
+
 | 版本 | 目录 | 行数 | 平台 | 特色 |
 |------|------|------|------|------|
 | **grok-skill-creator** | `grok-skill-creator/` | 270 行 | Grok Build | 紧凑方法论 + 评估流水线 + Description Trap |
@@ -133,26 +137,122 @@ v1.0 发布后，基于实际使用反馈和 Claude Code 版 skill-creator 的�
 
 ## 快速开始
 
+输入 `/grok-skill-creator` 或 `/skill:kimi-skill-creator` 或 `/new-skill`，描述你要创建的 Skill。系统自动走完「Three Gates → Write → Test → Grade → Optimize」全流程。
+
+**最常见的用法：**
+
+```
+/grok-skill-creator 帮我写一个自动分析股票基金的 skill
+/skill:kimi-skill-creator 我想做一个小红书标题优化的 skill
+/new-skill 帮我创建一个 PDF 处理的 skill
+```
+
+**不用记命令。** 说「帮我写个 skill」+ 描述场景，触发对应的 Skill Creator。
+
+---
+
+## 安装
+
 ### Grok Build
 
 ```
-将 grok-skill-creator/ 目录复制到 ~/.grok/skills/ 下即可使用。
-输入 /grok-skill-creator 触发。
+npx -y skills add taxueseek/skill-optimizer -g
 ```
+
+安装后 Skill 文件在 `~/.grok/skills/` 目录下。
 
 ### Kimi Code
 
+将 `kimi-skill-creator/` 目录复制到 `~/.kimi-code/skills/` 下即可：
+
 ```
-将 kimi-skill-creator/ 目录复制到 ~/.kimi-code/skills/ 下即可使用。
-输入 /skill:kimi-skill-creator 触发。
+cp -r kimi-skill-creator ~/.kimi-code/skills/
 ```
 
 ### MiMo Code
 
+将 `mimo-skill-creator/` 目录复制到 MiMo Code 的 `skills/` 目录下：
+
 ```
-将 mimo-skill-creator/ 目录复制到 MiMo Code 的 skills/ 目录下即可使用。
-输入 /new-skill 触发。
+cp -r mimo-skill-creator <mimocode-skills-dir>/
 ```
+
+### 手动安装（通用）
+
+```
+git clone https://github.com/taxueseek/skill-optimizer.git
+# 将对应平台的 skill 目录复制到 Agent 的 skills/ 目录下
+```
+
+---
+
+## 更新
+
+### 通过 `npx skills add` 安装的用户
+
+重新运行一次即可。安装和更新用的是同一条命令：
+
+```
+npx -y skills add taxueseek/skill-optimizer -g
+```
+
+### 手动安装的用户
+
+```
+cd <skill-optimizer-dir> && git pull
+```
+
+---
+
+## 技能表（3 个）
+
+| 斜杠命令 | 功能 | 平台 | 版本 |
+|---------|------|------|------|
+| `/grok-skill-creator` | Skill 创建 + 评估优化 + Description 调优 | Grok Build | v1.02 |
+| `/skill:kimi-skill-creator` | Skill 创建 + AgentSwarm 批量评估 + arguments 参数化 | Kimi Code | v1.02 |
+| `/new-skill` | Skill 创建 + TDD 驱动 + compose 生态集成 | MiMo Code | v1.02 |
+
+### grok-skill-creator 包含的脚本
+
+| 文件 | 功能 |
+|------|------|
+| `scripts/quick_validate.py` | 预检：frontmatter 格式、命名规范、description 长度 |
+| `scripts/aggregate_benchmark.py` | 聚合：grading.json → benchmark.json/md（mean±stddev + delta） |
+| `scripts/package_skill.py` | 打包：目录 → .skill 文件（zip） |
+| `eval-viewer/generate_review.py` | 审阅器：自包含 HTML 浏览器审阅页面 |
+| `agents/grader.md` | 评分代理指令 |
+| `agents/comparator.md` | 盲评代理指令 |
+| `agents/analyzer.md` | 分析代理指令 |
+
+### kimi-skill-creator 包含的脚本
+
+无额外脚本。所有功能通过 Kimi Code 的 `Agent`、`AgentSwarm`、`AskUserQuestion` 工具实现。
+
+### mimo-skill-creator 包含的脚本
+
+无额外脚本。所有功能通过 MiMo Code 的 `task` 工具 + `bash` 执行 Python 内联脚本实现。
+
+---
+
+## 工作流联动
+
+三个 Skill Creator 共享同一套闭环，但平台差异导致执行方式不同：
+
+```
+创建 SKILL.md
+    → Smoke Test（2 个 subagent，with vs without）
+        → 评估 Pipeline（10-20 个测试用例，with-skill vs baseline）
+            → 评分 + 聚合 → Benchmark
+                → 分析模式 → 改进 SKILL.md
+                    → Description Optimization → 重新评估
+                        → 满意 → 打包 .skill
+```
+
+**Grok Build**：`spawn_subagent` 原生并发，`scripts/` 目录预置 benchmark 聚合和打包脚本。
+
+**Kimi Code**：`AgentSwarm` 批量并发测试，`AskUserQuestion` 收集结构化反馈，`Bash` 内联 Python 聚合 benchmark。
+
+**MiMo Code**：`task` 工具 spawn/run 并发，4-6 并发分批执行，主代理负责持久化所有结果。
 
 ---
 
