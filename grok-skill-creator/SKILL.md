@@ -1,309 +1,270 @@
 ---
 name: grok-skill-creator
 description: >
-  Create new Grok skills, improve existing ones, and optimize skill descriptions for better triggering.
-  Use when the user wants to create a skill from scratch, edit or improve an existing skill,
-  run evals to test a skill, benchmark skill performance, or optimize a skill's description
-  for better triggering accuracy.
+  Create, test, and optimize Grok skills.
+  Use when creating a skill from scratch, editing one, testing if a skill works,
+  optimizing skill triggering, benchmarking performance, or packaging a .skill file.
+  Triggers: "create skill", "new skill", "edit skill", "test skill",
+  "skill not triggering", "optimize description", "package skill", "benchmark skill".
+  NOT for: CLAUDE.md rules, one-off prompts, project conventions.
 ---
 
-# Create Skill
+# Skill Creator — Grok
 
-This skill helps you create new Grok skills and iteratively improve existing ones.
+Create skills that extend Grok with specialized workflows. Leverages Grok's native subagent spawning, `bash`, `read`, `write`, `edit` tools.
 
-Figure out where the user is in the process — they might have a vague idea, a draft, or a finished skill that needs testing — and jump in to help them progress. Offer to optimize the skill's description for better triggering after the skill is done.
+## Three Gates (Pre-flight)
 
-## Communicating with the user
+All must pass. If any is no → stop.
 
-Match the user's technical level. "Evaluation" and "benchmark" are fine; for deeper jargon, wait for cues that the user knows it. Briefly explain when in doubt.
+1. **Grok can't already do this well?** → Skill is overhead.
+2. **User will use it 5+ times?** → One-shot → direct prompt.
+3. **Model has it built-in?** → Skill adds complexity, not value.
 
-## Creating a skill
+## Skill Anatomy
 
-### Pre-flight: Three Gates
+```
+skill-name/
+├── SKILL.md          # Required — frontmatter + instructions
+├── scripts/          # Optional — executable code
+├── references/       # Optional — loaded on demand
+└── assets/           # Optional — templates, icons, fonts
+```
 
-Before any design work, answer three questions. If any answer is no, stop or rethink.
+**Frontmatter:**
 
-1. **Without this skill, would the outcome be worse?** If Grok can already handle it well enough, the skill is unnecessary overhead.
-2. **Will the user use this skill more than five times?** One-shot automations are better served by a direct prompt or script.
-3. **Can Grok already do this natively?** If the model has the built-in capability, a skill adds complexity without value.
+```yaml
+name: kebab-case       # Required. Letters, digits, hyphens. Max 64 chars. Verb-led.
+description: >         # Required. Triggering conditions + what it does. Slightly "pushy".
+  Use when [trigger], [trigger], or [symptom].
+paths:                 # Optional. Glob patterns for auto-discovery.
+  - "src/**/*.tsx"
+```
 
-All three must pass before proceeding.
+**Discovery** — Grok finds SKILL.md from:
+- Project: `./.grok/skills/` (walked up to repo root)
+- User: `~/.grok/skills/`
+- Plugins: any enabled plugin's `skills/` directory
+- Config: `[skills] paths` in `~/.grok/config.toml`
+- Claude Code compat: `.claude/skills/`, `~/.agents/skills/`, `AGENTS.md`
 
-### Determine Complexity Tier
+**Invocation**: User-invocable skills appear as slash commands `/<skill-name>`.
 
-| Tier | When to use | SKILL.md size | Directories |
-|------|-------------|---------------|-------------|
-| **Simple** | Pure instructions, no executable code | < 150 lines | None |
-| **Medium** | Needs scripts or deep reference docs | 100-300 lines | `scripts/` or `references/` |
-| **Complex** | Multiple workflows + hooks + cross-platform | 200-650 lines | Multiple subdirs |
+## The #1 Mistake: Description Trap
 
-When uncertain, start Simple. It is easier to add complexity than remove it.
+When description summarizes the workflow, the model follows the description and skips the body.
 
-### Capture Intent
+```yaml
+# ❌ BAD: Summarizes workflow → model takes shortcut
+description: Use for TDD — write test first, watch it fail, write minimal code
 
-Extract from conversation history first — tools used, steps, corrections, input/output formats. Then fill gaps with the user: what should the skill do, when should it trigger, what's the expected output, and whether test cases are needed (objectively verifiable outputs benefit from tests; subjective ones don't).
+# ✅ GOOD: Triggering conditions only → forces model to read the body
+description: Use when implementing features or bugfixes, before writing code
+```
 
-### Choose Freedom Level
+**Formula:** `[Action verb] + [value]. Use when [trigger 1], [trigger 2], ...`
+Include 5+ triggers. Add exclusions. Be slightly "pushy" to combat undertriggering.
 
-Match specificity to task fragility: **high freedom** (text instructions) when many approaches are valid; **medium freedom** (parameterized scripts) when a preferred pattern exists; **low freedom** (specific scripts) when operations are fragile and consistency is critical.
+## Creation: 7 Steps
 
-### Write the SKILL.md
+### 1. Classify Complexity
 
-Based on the user interview, fill in these components:
+| Tier | SKILL.md | Dirs |
+|------|----------|------|
+| Simple | < 150 lines | None |
+| Medium | 100-300 | `scripts/` or `references/` |
+| Complex | 200-650 | Multiple |
 
-- **name**: kebab-case, max 64 chars, verb-led (`deploy-k8s` not `k8s-deployment`). Namespace by tool when it helps (`gh-address-comments`). Folder name must match.
-- **description**: primary triggering mechanism — include what the skill does AND specific trigger contexts. Make it slightly "pushy" to combat undertriggering. Formula: `[Action verb] + [value]. Use when [trigger 1], [trigger 2], ...`
-- **paths** (optional): glob patterns for automatic discovery (e.g., `src/**/*.tsx`). User can always invoke via `/<skill-name>` regardless.
+Start Simple. Easier to add than remove.
 
-### Skill Writing Guide
+### 2. Capture Intent
 
-**Anatomy:** `SKILL.md` (required) + optional `scripts/`, `references/`, `assets/`.
+From conversation history first: tools used, steps, corrections, I/O formats.
+Fill gaps: what should it do? when trigger? expected output? test cases needed?
 
-**Progressive disclosure:** metadata always in context → SKILL.md body on trigger → bundled resources on demand. Keep SKILL.md under 500 lines; add hierarchy when approaching the limit. Reference files one level deep, with TOC when >100 lines.
+### 3. Choose Freedom Level
 
-**Context window is a shared resource.** Grok is already very smart — only add what it doesn't have. Challenge every paragraph: "Does this justify its token cost?"
+- **High** (text): many valid approaches
+- **Medium** (parameterized scripts): preferred pattern exists
+- **Low** (specific scripts): fragile ops, consistency critical
 
-**Writing patterns:** use imperative form, explain the *why*, avoid rigid ALWAYS/NEVER structures. Start with a draft, revise with fresh eyes, aim for generality. Explain the *why* behind everything — Grok has good theory of mind and when given a good harness can go beyond rote instructions. Even if the user's feedback is terse or frustrated, try to understand what they actually want and need, then transmit that understanding into the instructions.
+### 4. Write SKILL.md
 
-**Output format template:** `# [Title]` → `## Executive summary / Key findings / Recommendations`
+**Body structure:** Overview → When to Use → Core Workflow → Quick Reference → Common Mistakes
 
-**No extraneous files** — no README, INSTALLATION_GUIDE, CHANGELOG, etc. Only what the agent needs to do the job. Skills must not contain malware or exploit code. A skill's contents should not surprise the user in their intent — don't create misleading skills or skills designed to facilitate unauthorized access. Things like "roleplay as an XYZ" are OK.
+**Rules:**
+- Imperative form, explain the *why*
+- One excellent example > many mediocre
+- ALWAYS/NEVER in caps → yellow flag → reframe with reasoning
+- Context window is shared — every token must earn its place
+- Keep SKILL.md < 500 lines; add hierarchy when approaching limit
+- References one level deep, TOC when > 100 lines
+- No README, CHANGELOG, or extraneous files
 
-### Test Cases
+**Skill types need different structures:**
 
-Create 10-20 test prompts at 7:2:1 ratio (common / edge / anomalous). Each case: what the user says, what the skill should do, what it should NOT do.
+| Type | Focus | Key section |
+|------|-------|-------------|
+| Discipline | Rules | Rationalization table + Red Flags |
+| Technique | How-to | Step-by-step + edge cases |
+| Pattern | Mental model | When to apply + counter-examples |
+| Reference | API/docs | Searchable index + retrieval paths |
 
-Measure: routing accuracy (>90%), output usability (>80%), token consumption (redundant <20%). Save to `evals/evals.json`.
+### 5. Validate
 
-## Running and evaluating test cases
+- YAML valid, `name` + `description` present
+- Description has 5+ trigger phrases
+- No placeholders, referenced paths exist
 
-This section is one continuous sequence — don't stop partway through.
+### 6. Smoke Test
 
-Organize results by iteration (`iteration-1/`, `iteration-2/`, etc.) and within that, each test case gets a directory (`eval-0/`, `eval-1/`, etc.).
+Spawn 2 subagents — one WITH skill, one WITHOUT. Verify baseline differs. Do NOT tell subagent it's being tested.
 
-### Spawn all runs (with-skill AND baseline) in the same turn
+### 7. Iterate
 
-For each test case, spawn two subagents in the same turn — one with the skill, one without. This is important: don't spawn the with-skill runs first and then come back for baselines later. Launch everything at once so they all finish around the same time.
+Improve → re-test → repeat until user satisfied or progress stalls.
 
-**With-skill run:**
+## Evaluation Pipeline
+
+### Architecture
+
+Subagents return results in response but may not reliably write to disk. **Controller persists all results.** Use parallel spawning for eval runs, blocking for graders.
+
+### Flow
+
+**1. Test cases** — 10-20 prompts, 7:2:1 ratio (common/edge/anomalous):
+```json
+[{"id": 0, "prompt": "user task", "expectations": ["includes X"]}]
+```
+
+**2. Paired subagents** — spawn WITH + WITHOUT in same turn, batch 2-3 cases:
+
+With-skill:
 ```
 Execute this task:
-- Skill path: <path-to-skill>
-- Task: <eval prompt>
-- Input files: <eval files if any, or "none">
-- Save outputs to: <workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/
-- Outputs to save: <what the user cares about>
+- Skill path: <path>
+- Task: <prompt>
+- Save outputs to: <workspace>/iter-N/eval-<ID>/with_skill/outputs/
 ```
 
-**Baseline run** (same prompt, but the baseline depends on context):
-- **Creating a new skill**: no skill at all. Same prompt, no skill path, save to `without_skill/outputs/`.
-- **Improving an existing skill**: the old version. Before editing, snapshot the skill (`cp -r <skill-path> <workspace>/skill-snapshot/`), then point the baseline subagent at the snapshot. Save to `old_skill/outputs/`.
+Without-skill (baseline): same prompt, no skill path → `without_skill/outputs/`
 
-Write an `eval_metadata.json` for each test case (assertions can be empty for now). Give each eval a descriptive name based on what it's testing — not just "eval-0". Use this name for the directory too.
+**3. Persist on notification** — immediately write responses to disk. This is the only opportunity to capture timing data.
 
+**4. Grade** — blocking grader per case:
 ```json
-{
-  "eval_id": 0,
-  "eval_name": "descriptive-name-here",
-  "prompt": "The user's task prompt",
-  "assertions": []
-}
+{"expectations": [{"text": "...", "passed": true, "evidence": "..."}],
+ "summary": {"passed": 2, "failed": 1, "total": 3, "pass_rate": 0.67}}
 ```
 
-### While runs are in progress, draft assertions
-
-Don't just wait for the runs to finish — use this time productively. Draft quantitative assertions for each test case and explain them to the user. If assertions already exist in `evals/evals.json`, review them and explain what they check.
-
-Good assertions are objectively verifiable and have descriptive names — they should read clearly so someone glancing at the results immediately understands what each one checks. Subjective skills (writing style, design quality) are better evaluated qualitatively — don't force assertions onto things that need human judgment.
-
-Update the `eval_metadata.json` files and `evals/evals.json` with the assertions once drafted. Also explain to the user what they'll see — both the qualitative outputs and the quantitative benchmark.
-
-### As runs complete, capture timing data
-
-When each subagent task completes, you receive a notification containing timing data. Save this immediately to `timing.json` in the run directory:
-
-```json
-{
-  "total_tokens": 84852,
-  "duration_ms": 23332,
-  "total_duration_seconds": 23.3
-}
+**5. Aggregate** → `benchmark.json` + `benchmark.md`:
+```
+| Metric | with_skill | without_skill | Delta |
+| Pass rate | 85% ± 5% | 35% ± 8% | +50% |
 ```
 
-This is the only opportunity to capture this data — process each notification as it arrives rather than trying to batch them.
+Use `scripts/aggregate_benchmark.py` when available.
 
-### Grade, aggregate, and present results
+**6. Analyze** — non-discriminating (always pass), flaky (high variance), broken (always fail both).
 
-Once all runs are done:
+**7. Present** — show qualitative outputs + quantitative data. For visual review, use `eval-viewer/generate_review.py` (HTML with Outputs + Benchmark tabs).
 
-1. **Grade each run** — spawn a grader subagent that evaluates each assertion against the outputs. The grader follows the instructions in `agents/grader.md`. Save results to `grading.json` in each run directory. Use this grading format:
+### Metrics
 
-```json
-{
-  "expectations": [
-    {
-      "text": "The output includes the name 'John Smith'",
-      "passed": true,
-      "evidence": "Found in transcript Step 3: 'Extracted names: John Smith, Sarah Johnson'"
-    }
-  ],
-  "summary": {
-    "passed": 2,
-    "failed": 1,
-    "total": 3,
-    "pass_rate": 0.67
-  }
-}
-```
-
-2. **Aggregate into benchmark** — collect all grading results into a `benchmark.json` with pass_rate, time, and tokens for each configuration, with mean ± stddev and the delta. You can use the `scripts/aggregate_benchmark.py` script:
-
-```bash
-python -m scripts.aggregate_benchmark <workspace>/iteration-T --skill-name <name>
-```
-
-This produces `benchmark.json` and `benchmark.md` with pass_rate, time, and tokens for each configuration, with mean ± stddev and the delta.
-
-3. **Do an analyst pass** — read the benchmark data and surface patterns the aggregate stats might hide. Look for assertions that always pass regardless of skill (non-discriminating), high-variance evals (possibly flaky), and time/token tradeoffs. The analyst follows the instructions in `agents/analyzer.md`.
-
-4. **Present results to the user** — show both qualitative outputs and quantitative data directly in the conversation. For each test case, show the prompt, the output from with-skill and without-skill, the grading results, and ask for the user's feedback.
-
-**Optional: Visual review with eval-viewer.** If the eval outputs include files the user needs to inspect (images, documents, spreadsheets), generate a self-contained HTML review page:
-
-```bash
-python <skill-creator-path>/eval-viewer/generate_review.py \
-  <workspace>/iteration-T \
-  --skill-name "my-skill" \
-  --benchmark <workspace>/iteration-T/benchmark.json
-```
-
-This opens a browser with two tabs: "Outputs" (each test case with inline-rendered files and feedback textboxes) and "Benchmark" (quantitative comparison). The user can click through each test case, leave feedback, and submit all reviews at once. Feedback is saved to `feedback.json` in the workspace.
-
-For headless environments without a browser, use `--static <output_path>` to write a standalone HTML file instead of starting a server.
-
-### Read the feedback
-
-When the user tells you they're done reviewing, collect their feedback. If you used the eval-viewer, read `feedback.json`:
-
-```json
-{
-  "reviews": [
-    {"run_id": "eval-0-with_skill", "feedback": "the chart is missing axis labels", "timestamp": "..."},
-    {"run_id": "eval-1-with_skill", "feedback": "", "timestamp": "..."},
-    {"run_id": "eval-2-with_skill", "feedback": "perfect, love this", "timestamp": "..."}
-  ],
-  "status": "complete"
-}
-```
-
-Empty feedback means the user thought it was fine. Focus your improvements on the test cases where the user had specific complaints.
-
-## Improving the skill
-
-This is the heart of the loop. You've run the test cases, the user has reviewed the results, and now you need to make the skill better based on their feedback.
-
-### Diagnose and Improve
-
-Classify issues by nature: **functional defects** (quick scan), **efficiency issues** (quantitative analysis), **architecture issues** (deep diagnosis), **trigger issues** (classifier calibration). Fix functional defects first.
-
-For every improvement, quantify token impact: necessary / optional / redundant. Target: redundant <20%. Move reference files to `references/` and load on demand.
-
-### How to think about improvements
-
-- **Generalize** from feedback — don't overfit to specific examples. If stubborn, try different metaphors.
-- **Stay lean** — read transcripts, not just outputs. Cut what isn't pulling its weight.
-- **Explain the why** — ALWAYS/NEVER in all caps is a yellow flag.
-- **Bundle repeated work** — if subagents independently write similar scripts, put it in `scripts/`.
-
-### The iteration loop
-
-Apply improvements → rerun into `iteration-<N+1>/` (including baselines) → collect feedback → repeat. Stop when the user is happy, feedback is all positive, or progress stalls.
-
-## Forward-testing
-
-Stress-test the skill by launching subagents that don't know they're testing. Use real task prompts ("Use skill-x at /path to solve y"), never meta-prompts ("Review the skill..."). Use fresh threads, pass raw artifacts, clean up between iterations. If it only succeeds with leaked context, tighten the skill.
-
-## Advanced: Blind comparison
-
-For situations where you want a more rigorous comparison between two versions of a skill (e.g., the user asks "is the new version actually better?"), there's a blind comparison system. The basic idea is: give two outputs to an independent grader subagent without telling it which is which, and let it judge quality. Then analyze why the winner won. The grader follows `agents/comparator.md` and the analyzer follows `agents/analyzer.md`.
-
-This is optional and most users won't need it. The human review loop is usually sufficient.
+| Metric | Target |
+|--------|--------|
+| Routing accuracy | > 90% |
+| Output usability | > 80% |
+| Redundant tokens | < 20% |
 
 ## Description Optimization
 
-The description field in SKILL.md frontmatter is the primary mechanism that determines whether Grok invokes a skill. After creating or improving a skill, offer to optimize the description for better triggering accuracy.
+Grok sees name + description in system-reminder. Simple queries may not trigger even with perfect match; complex/multi-step queries trigger reliably.
 
-### How Skill Triggering Works
+1. Create 20 realistic eval queries (should-trigger + should-not-trigger near-misses)
+2. User reviews and edits
+3. Spawn subagent per query to test triggering — 3 runs each
+4. Use `LongCat-2.0-Preview` model (best context efficiency for this task)
+5. 60% train / 40% held-out test split
+6. Analyze failures → improve description → re-run (up to 5 iterations)
+7. Select by **test score** (not train) to avoid overfitting
+8. Apply to frontmatter, show before/after
 
-Grok sees name + description in system-reminder and decides whether to consult the skill. Simple queries may not trigger even with a perfect match (Grok handles them directly); complex/multi-step queries reliably trigger when the description matches. Use substantive eval queries — simple ones like "read file X" won't trigger regardless.
+**Eval query quality matters.** Bad: `"Format this data"`. Good: `"ok so my boss just sent me this xlsx file (called 'Q4 sales final FINAL v2.xlsx') and she wants me to add a profit margin column. Revenue is in column C and costs in column D I think"`
 
-### Generate trigger eval queries
+## Bulletproofing Discipline Skills
 
-Create 20 eval queries — a mix of should-trigger and should-not-trigger. Save as JSON:
+Close loopholes explicitly. Build rationalization table from testing:
 
-```json
-[
-  {"query": "the user prompt", "should_trigger": true},
-  {"query": "another prompt", "should_trigger": false}
-]
+| Excuse | Reality |
+|--------|---------|
+| "Too simple to test" | Simple code breaks. 30 seconds to test. |
+| "I'll test after" | Tests-after = what it does. Tests-first = what it should do. |
+| "Skill is obviously clear" | Clear to you ≠ clear to other agents. |
+
+Red Flags list → easy self-check:
+```
+## Red Flags — STOP
+- Code before test
+- "This is different because..."
+- "I'm confident it's good"
+**All = Delete. Start over.**
 ```
 
-The queries must be realistic and something a Grok user would actually type. Not abstract requests, but concrete and specific with a good amount of detail.
+## Problem Classification
 
-Bad: `"Format this data"`, `"Search the web"`, `"Create a chart"`
-Good: `"ok so my boss just sent me this xlsx file (it's in my downloads, called something like 'Q4 sales final FINAL v2.xlsx') and she wants me to add a column that shows the profit margin as a percentage. The revenue is in column C and costs are in column D I think"`
+| Class | Meaning | Fix |
+|-------|---------|-----|
+| A — Functional | Broken | Quick scan |
+| B — Efficiency | Wastes tokens | Quant analysis |
+| C — Architecture | Structural | Deep diagnosis |
+| D — Trigger | Wrong trigger | Classifier cal |
 
-For the **should-trigger** queries (8-10), think about coverage — different phrasings of the same intent, some formal, some casual. Include cases where the user doesn't explicitly name the skill or file type but clearly needs it. For the **should-not-trigger** queries (8-10), the most valuable ones are the near-misses — queries that share keywords or concepts with the skill but actually need something different. Think adjacent domains, ambiguous phrasing where a naive keyword match would trigger but shouldn't. Avoid obviously irrelevant negatives ("Write a fibonacci function" for a PDF skill tests nothing).
+P0 (blocking) → P1 (noticeable) → P2 (nice). Fix functional first.
 
-### Review the eval set with the user
+## Forward-testing & Blind Comparison
 
-Present the eval set for review. They can edit, toggle, add/remove entries.
+**Forward-testing:** Launch subagents that don't know they're testing. Use real task prompts, never meta-prompts. Fresh threads, raw artifacts, clean up between iterations.
 
-**Optional: Visual eval review.** Generate an HTML review page from `assets/eval_review.html` — replace `__EVAL_DATA_PLACEHOLDER__`, `__SKILL_NAME_PLACEHOLDER__`, `__SKILL_DESCRIPTION_PLACEHOLDER__`, write to `/tmp/eval_review_<name>.html`, and open it. User edits, then clicks "Export Eval Set" to download to `~/Downloads/eval_set.json`.
-
-### Run the optimization loop
-
-All subagents use `LongCat-2.0-Preview` (best balance of context efficiency, error rate, sample size for this task type).
-
-For each query, spawn a subagent to test triggering. Run each query 3 times. Use 60% training / 40% held-out test. Analyze failures, then spawn an improver subagent to propose a better description — generalize from failures, keep it 100-200 words, focus on intent, make it distinctive. Run up to 5 iterations, select by test score.
-
-### Apply the result
-
-Take the best description and update the skill's SKILL.md frontmatter. Show the user before/after and report the scores.
-
-## Continuous Evolution
-
-Capture patterns across cycles: recurring fix patterns → `references/engineering-patterns.md`, new anti-patterns → document them, token baseline shifts >20% → re-calibrate. When this skill itself is updated, run a self-diagnosis pass.
-
-## Reference files
-
-The agents/ directory contains instructions for specialized subagents. Read them when you need to spawn the relevant subagent.
-
-- `agents/grader.md` — How to evaluate assertions against outputs
-- `agents/comparator.md` — How to do blind A/B comparison between two outputs
-- `agents/analyzer.md` — How to analyze why one version beat another
-
-The references/ directory has additional documentation:
-- `references/schemas.md` — JSON structures for evals.json, grading.json, benchmark.json, etc.
-
----
+**Blind comparison:** Give two outputs to an independent grader without telling it which is which. Judge quality, then analyze why the winner won. Uses `agents/comparator.md` + `agents/analyzer.md`. Optional — human review loop usually sufficient.
 
 ## Packaging
 
-Run `python <skill-creator-path>/scripts/quick_validate.py <skill-folder>` first. Fix any errors.
+Validate first: `python scripts/quick_validate.py <skill-folder>`
 
-Build `.skill` file (zip archive):
 ```bash
-cd <skill-dir>/..
-zip -r <skill-name>.skill <skill-name>/ \
-  -x "<skill-name>/evals/*" \
-  -x "<skill-name>/iteration-*/*" \
-  -x "<skill-name>/workspace/*" \
-  -x "<skill-name>/__pycache__/*" \
-  -x "<skill-name>/.DS_Store"
+cd <skill-dir>/.. && zip -r <name>.skill <name>/ \
+  -x "<name>/evals/*" -x "<name>/iteration-*/*" \
+  -x "<name>/workspace/*" -x "*__pycache__*" -x "*.DS_Store"
 ```
-Include `SKILL.md` + `scripts/`, `references/`, `assets/`. Exclude evals, iterations, workspace, pycache, .DS_Store.
 
-Also generate `<skill-name>-summary.md` with: description, what it does, when to use, file structure, usage (`/<skill-name>`), requirements.
+Generate `<name>-summary.md`: description, when to use, file structure, usage (`/<name>`), requirements.
 
----
+## 5 Common Failures
+
+| # | Failure | Fix |
+|---|---------|-----|
+| 1 | Description too vague | 5+ trigger phrases, formula |
+| 2 | SKILL.md dumping ground (800+ lines) | < 500 lines, split to references/ |
+| 3 | ALWAYS/NEVER caps | Explain reasoning |
+| 4 | No smoke test before shipping | Run Step 6 |
+| 5 | Description summarizes workflow | Triggering conditions ONLY |
+
+## Reference Files
+
+- `agents/grader.md` — assertion evaluation
+- `agents/comparator.md` — blind A/B comparison
+- `agents/analyzer.md` — benchmark analysis
+- `references/schemas.md` — JSON structures (evals, grading, benchmark)
+- `scripts/aggregate_benchmark.py` — benchmark aggregation
+- `scripts/quick_validate.py` — pre-packaging validation
+
+## Meta-Advice
+
+1. **Description is everything.** Great skill + bad description = invisible.
+2. **Explain why.** Model generalizes better with reasoning.
+3. **Draft then look fresh.** First draft: too detailed or too vague.
+4. **Generalize from feedback.** Encode the principle, not the fix.
+5. **Bundle repeated work.** If subagents independently write similar scripts → `scripts/`.
+6. **Context window is shared.** Every token earns its place.
+7. **Test before deploying.** 15 min testing saves hours debugging.

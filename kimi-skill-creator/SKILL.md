@@ -1,23 +1,24 @@
 ---
-name: mimo-skill-creator
+name: kimi-skill-creator
 description: >
-  Create, test, and optimize skills for MiMo Code.
+  Create, test, and optimize Kimi Code skills.
   Use when creating a skill, editing one, testing if a skill works,
-  optimizing skill triggering, or packaging a .skill file.
+  optimizing triggering, or packaging a .skill file.
   Triggers: "create skill", "new skill", "edit skill", "test skill",
-  "skill not triggering", "optimize description", "package skill".
-  NOT for: CLAUDE.md rules, one-off prompts, project conventions.
+  "skill not triggering", "optimize description", "package skill",
+  "SKILL.md", "whenToUse".
+  NOT for: AGENTS.md rules, one-off prompts, project conventions.
 ---
 
-# Skill Creator — MiMo Code
+# Skill Creator — Kimi Code
 
-Create skills that extend MiMo Code with specialized workflows. Leverages `task`, `bash`, `read`, `write`, `edit`, `skill` tools natively.
+Create skills that extend Kimi Code with specialized workflows. Leverages native `Agent`, `AgentSwarm`, `Bash`, `Read`, `Write`, `Edit`, `Skill`, `AskUserQuestion` tools.
 
 ## Three Gates (Pre-flight)
 
-All must pass before starting. If any is no → stop.
+All must pass. If any is no → stop.
 
-1. **MiMo Code can't already do this well?** → Skill is overhead.
+1. **Kimi can't already do this well?** → Skill is overhead.
 2. **User will use it 5+ times?** → One-shot → direct prompt.
 3. **Model has it built-in?** → Skill adds complexity, not value.
 
@@ -31,19 +32,29 @@ skill-name/
 └── assets/           # Optional — templates, icons, fonts
 ```
 
-**Frontmatter** — only 3 fields are read by MiMo Code:
+**Frontmatter** — Kimi Code reads these fields:
 
 ```yaml
-name: kebab-case       # Required. Letters, digits, hyphens. Max 64 chars.
-description: >         # Required. Max 500 chars. Triggering conditions ONLY.
+name: kebab-case              # Required (dir type). Case-insensitive.
+description: >                # Required (dir type). Model uses this to decide when to load.
   Use when [trigger], [trigger], or [symptom].
-hidden: true           # Optional. true = loaded but not in available_skills list.
+type: prompt                  # prompt (default) | inline (same) | flow (manual only)
+whenToUse: >                  # Trigger scenario. Also accepts when-to-use / when_to_use.
+  当用户让我 [场景] 时
+disableModelInvocation: false # true = block auto-invocation (only /skill: manual)
+arguments:                    # Named params: $name in body. Also: $ARGUMENTS, $0, $1
+  - target
+  - mode
 ```
 
-**Placement** — MiMo Code discovers SKILL.md recursively from:
-- Project: `.mimocode/skills/**`, `.claude/skills/**`, `.agents/skills/**`, `.codex/skills/**`
-- Global: `~/.config/mimocode/skills/**`, `~/.claude/skills/**`, `~/.agents/skills/**`
-- Config: `skills.paths` and `skills.urls` in `mimocode.json`
+**Placeholders in body:** `$ARGUMENTS`, `$0`/`$1`/`$<name>`, `${KIMI_SKILL_DIR}`
+
+**Discovery** — priority: Project > User > Extra > Built-in
+- Project: `.kimi-code/skills/`, `.agents/skills/`
+- User: `~/.kimi-code/skills/`, `~/.agents/skills/`
+- Extra: `extra_skill_dirs` in config.toml
+
+**Invocation:** `/skill:name args` (slash) or auto via description + whenToUse (unless `disableModelInvocation: true` or `type: flow`). Max nesting: 3 levels.
 
 ## The #1 Mistake: Description Trap
 
@@ -58,7 +69,7 @@ description: Use when implementing features or bugfixes, before writing code
 ```
 
 **Formula:** `[Action verb] + [value]. Use when [trigger 1], [trigger 2], ...`
-Include 5+ triggers. Add exclusions. Be slightly "pushy".
+Include 5+ triggers. Add exclusions. Be slightly "pushy". Use `whenToUse` for scenario description (Chinese-friendly).
 
 ## Creation: 7 Steps
 
@@ -85,15 +96,16 @@ Fill gaps: what should it do? when trigger? expected output? test cases needed?
 
 ### 4. Write SKILL.md
 
-**Body structure:** Overview → When to Use → Core Workflow → Quick Reference → Common Mistakes → Integration
+**Body structure:** Overview → When to Use → Core Workflow → Quick Reference → Common Mistakes
 
 **Rules:**
 - Imperative form, explain the *why*
 - One excellent example > many mediocre
 - ALWAYS/NEVER in caps → yellow flag → reframe with reasoning
 - Context window is shared — every token must earn its place
-- Cross-reference by name (`compose:tdd`), not @link (force-loads, burns context)
-- Target: redundant content < 20%
+- Keep SKILL.md < 500 lines; add hierarchy when approaching limit
+- References one level deep, TOC when > 100 lines
+- No README, CHANGELOG, or extraneous files
 
 **Skill types need different structures:**
 
@@ -104,26 +116,30 @@ Fill gaps: what should it do? when trigger? expected output? test cases needed?
 | Pattern | Mental model | When to apply + counter-examples |
 | Reference | API/docs | Searchable index + retrieval paths |
 
+**Kimi-specific patterns:**
+- Use `arguments` for parameterized skills: `$target`, `$mode` in body
+- Use `type: flow` for skills that should ONLY be invoked manually (no auto-trigger)
+- Use `disableModelInvocation: true` to force explicit `/skill:` invocation
+
 ### 5. Validate
 
 - YAML valid, `name` + `description` present
-- Description < 500 chars, "Use when..." format
+- `whenToUse` provides clear scenario
 - No placeholders, referenced paths exist
 
 ### 6. Smoke Test
 
-Spawn 2 subagents via `task` tool — one WITH skill, one WITHOUT:
+Spawn 2 subagents via `Agent` tool — one WITH skill, one WITHOUT:
 
 ```
-task({
-  action: "spawn",
-  agent: "general",
+Agent({
+  prompt: "Follow these instructions:\n\n## Skill: <name>\n<paste SKILL.md>\n\n## Task\n<test task>",
   description: "smoke-test-with-skill",
-  prompt: "Follow these instructions:\n\n## Skill: <name>\n<paste SKILL.md>\n\n## Task\n<test task>"
+  subagent_type: "coder"
 })
 ```
 
-Verify baseline differs. Do NOT tell subagent it's being tested.
+Verify baseline differs. Do NOT tell subagent it's being tested. Use `AgentSwarm` for batch parallel testing.
 
 ### 7. Iterate
 
@@ -133,7 +149,7 @@ Improve → re-test → repeat until user satisfied or progress stalls.
 
 ### Architecture
 
-MiMo Code subagents return results in response but do NOT reliably write to disk. **Controller persists all results.** Use `spawn` for parallel eval, `run` for blocking graders.
+Subagents return results in response but do NOT reliably write to disk. **Controller persists all results.** Use `Agent` (foreground) or `AgentSwarm` (batch parallel) for eval runs.
 
 ### Flow
 
@@ -142,32 +158,37 @@ MiMo Code subagents return results in response but do NOT reliably write to disk
 [{"id": 0, "prompt": "user task", "expectations": ["includes X"]}]
 ```
 
-**2. Paired subagents** — batch 2-3 cases (4-6 concurrent):
+**2. Paired subagents** — use `AgentSwarm` for batch parallel:
 ```
-task({ action: "spawn", agent: "general", description: "eval-0-with",
-       prompt: "<SKILL.md content>\n\nTask: <prompt>" })
-task({ action: "spawn", agent: "general", description: "eval-0-without",
-       prompt: "Solve this task without any external instructions.\n\nTask: <same prompt>" })
+AgentSwarm({
+  prompt_template: "## Skill: <name>\n<SKILL.md content>\n\nTask: <ITEM>",
+  items: ["eval-0: <prompt0>", "eval-1: <prompt1>", ...],
+  subagent_type: "coder"
+})
 ```
 
-**3. Persist on notification** — immediately write responses:
+Baseline: same prompts without skill content.
+
+**3. Persist results** — write responses to:
 ```
 evals/iter-N/eval-<ID>/with_skill.md
 evals/iter-N/eval-<ID>/without_skill.md
 ```
 
-**4. Grade** — `run` blocking grader per case:
+**4. Grade** — `Agent` per case:
 ```json
 {"expectations": [{"text": "...", "with_skill": "pass", "without_skill": "fail", "evidence": "..."}]}
 ```
 
-**5. Aggregate** via `bash` + Python → `benchmark.md`:
+**5. Aggregate** via `Bash` + Python → `benchmark.md`:
 ```
 | Metric | with_skill | without_skill | Delta |
 | Pass rate | 85% ± 5% | 35% ± 8% | +50% |
 ```
 
-**6. Analyze** — non-discriminating (always pass), flaky (high variance), broken (always fail both).
+**6. Analyze** — non-discriminating, flaky, broken assertions.
+
+**7. Present** — use `AskUserQuestion` for structured feedback collection.
 
 ### Metrics
 
@@ -180,9 +201,9 @@ evals/iter-N/eval-<ID>/without_skill.md
 ## Description Optimization
 
 1. Create 20 realistic eval queries (should-trigger + should-not-trigger near-misses)
-2. User reviews
-3. Spawn subagent per query to test triggering — 3 runs each
-4. Analyze failures → improve description → re-run (up to 5 iterations)
+2. User reviews via `AskUserQuestion`
+3. Spawn `Agent` per query to test triggering — 3 runs each
+4. Analyze failures → improve description + `whenToUse` → re-run (up to 5 iterations)
 5. Select by **test score** (not train) to avoid overfitting
 6. Apply to frontmatter
 
@@ -195,7 +216,7 @@ Close loopholes explicitly. Build rationalization table from testing:
 | "Too simple to test" | Simple code breaks. 30 seconds to test. |
 | "I'll test after" | Tests-after = what it does. Tests-first = what it should do. |
 
-Red Flags list → easy self-check:
+Red Flags list:
 ```
 ## Red Flags — STOP
 - Code before test
@@ -214,13 +235,6 @@ Red Flags list → easy self-check:
 
 P0 (blocking) → P1 (noticeable) → P2 (nice).
 
-## Compose Integration
-
-Skills can reference compose skills: `compose:ask`, `compose:tdd`, `compose:verify`, `compose:plan`.
-Use `task` tool for subagent dispatch, `skill` tool for loading skills.
-
-**Key:** Compose skills do NOT appear in subagents' `available_skills`. Pass SKILL.md content directly in subagent prompt.
-
 ## Packaging
 
 ```bash
@@ -228,11 +242,13 @@ cd <root> && zip -r my-skill.skill my-skill/ \
   -x "my-skill/evals/*" -x "my-skill/iter-*/*" -x "*__pycache__*"
 ```
 
+Validate: name + description present, whenToUse clear, no placeholders, paths exist.
+
 ## 5 Common Failures
 
 | # | Failure | Fix |
 |---|---------|-----|
-| 1 | Description too vague | 5+ trigger phrases |
+| 1 | Description too vague | 5+ trigger phrases + whenToUse |
 | 2 | SKILL.md dumping ground (800+ lines) | < 500 lines, split to references/ |
 | 3 | ALWAYS/NEVER caps | Explain reasoning |
 | 4 | No smoke test | Run Step 6 before shipping |
@@ -246,3 +262,4 @@ cd <root> && zip -r my-skill.skill my-skill/ \
 4. **Generalize from feedback.** Encode the principle, not the fix.
 5. **Context window is shared.** Every token earns its place.
 6. **Test before deploying.** 15 min testing saves hours debugging.
+7. **Use Kimi-native tools.** `AgentSwarm` for parallel eval, `AskUserQuestion` for structured feedback, `TodoList` for progress tracking.

@@ -2,14 +2,27 @@
 
 > 让 AI Agent 的 Skill 从「能用」变成「好用」。
 
-一套跨平台的 **Skill 设计、测试、优化工具包**。包含两个平台专用版本：
+一套跨平台的 **Skill 设计、测试、优化工具包**。包含三个平台专用版本：
 
 | 版本 | 目录 | 行数 | 平台 | 特色 |
 |------|------|------|------|------|
-| **grok-skill-creator** | `grok-skill-creator/` | 309 行 | Grok Build | 紧凑方法论 + 7 个 Python 脚本 + eval-viewer |
-| **mimo-skill-creator** | `mimo-skill-creator/` | 370 行 | MiMo Code | TDD 驱动 + actor 工具集成 + 批量并发控制 |
+| **grok-skill-creator** | `grok-skill-creator/` | 270 行 | Grok Build | 紧凑方法论 + 评估流水线 + Description Trap |
+| **kimi-skill-creator** | `kimi-skill-creator/` | 265 行 | Kimi Code | AgentSwarm 批量并发 + arguments 参数化 + whenToUse |
+| **mimo-skill-creator** | `mimo-skill-creator/` | 248 行 | MiMo Code | TDD 驱动 + compose 生态集成 + 合理化表格 |
 
-两个版本共享同一套核心方法论（Three Gates → Capture Intent → Write → Test → Grade → Optimize），但深度适配各自平台的工具链和运行模型。
+三个版本共享同一套核心方法论（Three Gates → Capture Intent → Write → Test → Grade → Optimize），但深度适配各自平台的工具链和运行模型。
+
+---
+
+## 项目灵感
+
+Skill Optimizer 的灵感来源于 Claude Code 自带的 `skill-creator`。
+
+在分别使用 Grok Build、Kimi Code 和 MiMo Code 的过程中，我们发现这些 Agent 内置的 skill 创建引导（或类似功能的 skill）水平参差不齐——优化和测试 skill 的工具相当简陋，导致一个 skill 写出来之后需要反复返工：触发不准、内容冗余、缺乏量化验证手段。
+
+于是我们决定：**不做通用指南，针对每个 Agent 的实际环境、官方文档和工具接口，分别开发专用版本。** 每个版本都用该平台的原生工具实现完整的「创建 → 测试 → 评估 → 优化」闭环，而不是写一层适配层去抹平差异。
+
+这就是 Skill Optimizer 的定位：**不是又一个 skill 教程，而是三个可以直接跑起来的 skill 工程流水线。**
 
 ---
 
@@ -58,25 +71,63 @@ Three Gates（该不该写）
 
 ---
 
-## 两个版本的差异
+## v1.02 更新内容
+
+v1.0 发布后，基于实际使用反馈和 Claude Code 版 skill-creator 的参照分析，做了大幅重构：
+
+### 新增 Kimi Code 版本
+
+新增 `kimi-skill-creator/`（265 行），覆盖 Kimi Code 特有的 `Agent`、`AgentSwarm`、`AskUserQuestion` 工具，以及 `arguments` 参数化、`whenToUse` 触发场景、`type: flow` 手动触发等原生机制。
+
+### 三个版本共同吸收的改进
+
+| 改进 | 旧版 | 新版 |
+|------|------|------|
+| **Description Trap** | 无 | 明确指出 description 总结 workflow 会导致模型走捷径跳过 body，附 ❌/✅ 对比 |
+| **Skill 类型分类** | 无 | Discipline/Technique/Pattern/Reference 四种类型给不同写作框架 |
+| **Bulletproofing 合理化表格** | 无 | Excuse → Reality 对照表，堵住「这次不一样」的借口 |
+| **5 Common Failures** | 散落各处 | 集中成排障手册，可快速扫描 |
+| **评估 Pipeline** | 简单测试描述 | 完整 7 步流水线（test cases → paired runs → persist → grade → aggregate → analyze → present） |
+| **平台原生工具** | 部分依赖通用描述 | 深度适配各平台（Grok 的 `spawn_subagent` / Kimi 的 `AgentSwarm` / MiMo 的 `task`） |
+
+### 行数变化
+
+| 版本 | v1.0 | v1.02 | 变化 |
+|------|------|-------|------|
+| grok-skill-creator | 309 行 | 270 行 | -12.6% |
+| mimo-skill-creator | 370 行 | 248 行 | -33.0% |
+| kimi-skill-creator | — | 265 行 | 新增 |
+
+更少的行数，更多的信息。压缩靠的是把教程体换成手册体、散落的建议汇成表格、重复的说明合并到流程里。
+
+---
+
+## 三个版本的差异
 
 ### grok-skill-creator（Grok Build）
 
-- **309 行**，极致紧凑，同样的方法论用更少的 token 传达
-- 7 个 Python 脚本：`quick_validate.py`（预检）、`aggregate_benchmark.py`（聚合）、`package_skill.py`（打包）、`generate_report.py`（报告）、`utils.py`（工具函数）
-- `eval-viewer/` — 自包含 HTML 浏览器审阅页面，零依赖
-- `agents/` — grader、comparator、analyzer 三个子代理指令
+- **270 行**，极致紧凑
+- 深度适配 Grok 的 `spawn_subagent` 原生能力
+- 内置 `agents/`（grader、comparator、analyzer）+ `scripts/`（aggregate_benchmark、quick_validate、eval-viewer）
 - `references/schemas.md` — 完整 JSON Schema 定义
-- 描述优化依赖 Grok 原生 `spawn_subagent`，无需额外脚本
+- Description Optimization 指定 `LongCat-2.0-Preview` 模型，60/40 train/test split
+
+### kimi-skill-creator（Kimi Code）
+
+- **265 行**，Kimi Code 原生工具全覆盖
+- `Agent`（单任务）和 `AgentSwarm`（批量并发）两种执行模式
+- `arguments` 参数化：`$target`、`$mode` 在 body 中直接引用
+- `whenToUse` 字段：中文友好的触发场景描述
+- `type: flow` + `disableModelInvocation: true`：精细控制自动触发 vs 手动触发
+- `AskUserQuestion` 结构化反馈收集
 
 ### mimo-skill-creator（MiMo Code）
 
-- **370 行**，TDD 驱动——「没看过 Agent 失败，就不知道 Skill 教的对不对」
-- 深度集成 MiMo Code 的 `actor` 工具（`spawn`/`run` 两种模式）
-- 明确的**批量并发控制**：4-6 并发，分批执行，不一次性全部发射
+- **248 行**，三个版本中最紧凑
+- 深度集成 MiMo Code 的 `task` 工具（`spawn`/`run` 两种模式）
+- `compose:` 生态引用（`compose:tdd`、`compose:verify`、`compose:ask`、`compose:plan`）
+- 明确的批量并发控制：4-6 并发，分批执行
 - **控制器负责持久化**：subagent 不写磁盘，主代理收到 `actor-notification` 后立即落盘
-- 12 条 Never + 8 条 Always 的 Red Flags 清单
-- 7 步创建流程（含 Validate + Quick Smoke Test）
 
 ---
 
@@ -89,6 +140,13 @@ Three Gates（该不该写）
 输入 /grok-skill-creator 触发。
 ```
 
+### Kimi Code
+
+```
+将 kimi-skill-creator/ 目录复制到 ~/.kimi-code/skills/ 下即可使用。
+输入 /skill:kimi-skill-creator 触发。
+```
+
 ### MiMo Code
 
 ```
@@ -98,33 +156,11 @@ Three Gates（该不该写）
 
 ---
 
-## 技能表
-
-### grok-skill-creator 包含的脚本
-
-| 文件 | 功能 |
-|------|------|
-| `scripts/quick_validate.py` | 预检：frontmatter 格式、命名规范、description 长度 |
-| `scripts/aggregate_benchmark.py` | 聚合：grading.json → benchmark.json/md（mean±stddev + delta） |
-| `scripts/package_skill.py` | 打包：目录 → .skill 文件（zip） |
-| `scripts/generate_report.py` | 报告：description 优化迭代的 HTML 可视化 |
-| `scripts/utils.py` | 工具：parse_skill_md() 共享解析器 |
-| `eval-viewer/generate_review.py` | 审阅器：自包含 HTML 浏览器审阅页面 |
-| `agents/grader.md` | 评分代理指令 |
-| `agents/comparator.md` | 盲评代理指令 |
-| `agents/analyzer.md` | 分析代理指令 |
-
-### mimo-skill-creator 包含的脚本
-
-无额外脚本。所有功能通过 MiMo Code 的 `actor` 工具 + `bash` 执行 Python 内联脚本实现。
-
----
-
 ## 设计哲学
 
 1. **先验证，后交付**：每个 Skill 必须经过 with-skill vs without-skill 的对比测试
-2. **Token 即成本**：Grok 版 309 行 vs 行业平均 500+ 行，同样的信息更少的 token
-3. **平台原生优先**：不写适配层，直接用平台提供的工具（`spawn_subagent` / `actor`）
+2. **Token 即成本**：三个版本都控制在 300 行以内，同样的信息更少的 token
+3. **平台原生优先**：不写适配层，直接用平台提供的工具
 4. **可量化**：pass_rate、time、tokens 三个维度，mean ± stddev，delta 一目了然
 5. **迭代有终点**：用户满意 / 反馈全正 / 进度停滞，三者满足其一即停
 
@@ -134,6 +170,7 @@ Three Gates（该不该写）
 
 | 版本 | 更新 | 日期 |
 |------|------|------|
+| v1.02 | 新增 kimi-skill-creator；grok/mimo 两版大幅重构（Description Trap、Skill 类型分类、Bulletproofing、评估 Pipeline、5 Common Failures） | 2026-06 |
 | v1.0 | 初始发布：grok-skill-creator + mimo-skill-creator | 2026-06 |
 
 ---
