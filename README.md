@@ -4,17 +4,20 @@
 
 一套跨平台的 **Skill 设计、测试、优化工具包**。包含三个平台专用版本：
 
-**最新更新：v1.02**
+**最新更新：v1.1.0 — Prove 层**
 
-**v1.02 更新**：新增 kimi-skill-creator（Kimi Code 定制版）；grok/mimo 两版大幅重构—，新增 Description Trap（description 总结 workflow 会导致模型走捷径跳过 body）、Skill 类型分类（Discipline/Technique/Pattern/Reference 四种框架）、Bulletproofing 合理化表格、7 步评估 Pipeline、5 Common Failures 排障手册。行数不增反降：grok 309→270，mimo 370→248。
+**v1.1.0**：共享 **Prove 发版门**（来自 session-digger 工程实践）：`scripts/prove_skill.py` = 结构审计 + 活体/夹具回放 + ship_ready；Failure Pattern 库（F-SUBSTR / F-HARDCODE / F-NO-LIVE…）；`baseline_gate.py` 防回归。三平台 creator 均增加 **Step 8 Prove**，打包前必须过门。
 
-| 版本 | 目录 | 行数 | 平台 | 特色 |
-|------|------|------|------|------|
-| **grok-skill-creator** | `grok-skill-creator/` | 270 行 | Grok Build | 紧凑方法论 + 评估流水线 + Description Trap |
-| **kimi-skill-creator** | `kimi-skill-creator/` | 265 行 | Kimi Code | AgentSwarm 批量并发 + arguments 参数化 + whenToUse |
-| **mimo-skill-creator** | `mimo-skill-creator/` | 248 行 | MiMo Code | TDD 驱动 + compose 生态集成 + 合理化表格 |
+**v1.02**：kimi-skill-creator；Description Trap；7 步评估 Pipeline 等。
 
-三个版本共享同一套核心方法论（Three Gates → Capture Intent → Write → Test → Grade → Optimize），但深度适配各自平台的工具链和运行模型。
+| 版本 | 目录 | 平台 | 特色 |
+|------|------|------|------|
+| **grok-skill-creator** | `grok-skill-creator/` | Grok Build | 紧凑方法论 + 评估流水线 + Prove |
+| **kimi-skill-creator** | `kimi-skill-creator/` | Kimi Code | AgentSwarm + whenToUse + Prove |
+| **mimo-skill-creator** | `mimo-skill-creator/` | MiMo Code | TDD / compose + Prove |
+| **shared prove** | `scripts/` + `references/` | 全平台 | audit · live · baseline_gate |
+
+核心闭环：**Three Gates → Write → Smoke → Eval → Optimize → Prove → Package**。
 
 ---
 
@@ -70,8 +73,42 @@ Three Gates（该不该写）
         → 评分（grading.json）
             → 聚合对比（benchmark.json）
                 → 分析模式（analyzer）
+                    → Prove 发版门（audit + live）
                     → 改进 → 下一轮
 ```
+
+### Prove 发版门（v1.1，共享）
+
+结构看着对 ≠ 行为对。打包前：
+
+```bash
+cd /path/to/skill-optimizer
+
+# 对人：终端摘要
+python3 scripts/prove_skill.py /path/to/your-skill
+
+# 对 CI / 棘轮：JSON + 严格门
+python3 scripts/prove_skill.py /path/to/your-skill --json -o /tmp/prove.json
+python3 scripts/prove_skill.py /path/to/your-skill --strict
+
+# 改动前后对比（拒绝变差）
+python3 scripts/prove_skill.py /path/to/your-skill --json -o /tmp/before.json
+# ... 编辑 skill ...
+python3 scripts/prove_skill.py /path/to/your-skill --json -o /tmp/after.json
+python3 scripts/baseline_gate.py --baseline /tmp/before.json --current /tmp/after.json
+```
+
+| 脚本 | 作用 |
+|------|------|
+| `scripts/skill_audit.py` | 结构 / description trap / 硬编码路径 |
+| `scripts/live_replay.py` | 跑 `scripts/verify.sh` 或 pytest |
+| `scripts/prove_skill.py` | 合并审计 + 活体 → `ship_ready` |
+| `scripts/baseline_gate.py` | 基线棘轮 |
+| `scripts/failure_patterns.py` | F-* 模式目录 |
+| `references/prove-pipeline.md` | 政策说明 |
+| `references/failure-patterns.md` | 模式手册 |
+
+目标 skill 建议提供 `scripts/verify.sh`（真实检查 exit 0）或 `tests/`。无夹具时 prove 可过 audit，但会标 **F-NO-LIVE / dry_run**。
 
 ---
 

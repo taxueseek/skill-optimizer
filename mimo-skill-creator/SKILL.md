@@ -5,7 +5,8 @@ description: >
   Use when creating a skill, editing one, testing if a skill works,
   optimizing skill triggering, or packaging a .skill file.
   Triggers: "create skill", "new skill", "edit skill", "test skill",
-  "skill not triggering", "optimize description", "package skill".
+  "skill not triggering", "optimize description", "package skill",
+  "prove skill", "skill ship gate".
   NOT for: CLAUDE.md rules, one-off prompts, project conventions.
 ---
 
@@ -129,6 +130,18 @@ Verify baseline differs. Do NOT tell subagent it's being tested.
 
 Improve → re-test → repeat until user satisfied or progress stalls.
 
+### 8. Prove (ship gate)
+
+```bash
+python3 scripts/prove_skill.py <path-to-target-skill>
+python3 scripts/prove_skill.py <path-to-target-skill> --json -o /tmp/prove.json
+python3 scripts/prove_skill.py <path-to-target-skill> --strict
+```
+
+Ship only when `ship_ready`. Prefer target skill `scripts/verify.sh` or `tests/`.  
+Baseline ratchet: `baseline_gate.py --baseline before.json --current after.json`.  
+See `../references/prove-pipeline.md` and `../references/failure-patterns.md`.
+
 ## Evaluation Pipeline
 
 ### Architecture
@@ -223,6 +236,10 @@ Use `task` tool for subagent dispatch, `skill` tool for loading skills.
 
 ## Packaging
 
+1. Validate frontmatter  
+2. **Prove:** `python3 scripts/prove_skill.py <skill> --strict`  
+3. Package only if ship_ready:
+
 ```bash
 cd <root> && zip -r my-skill.skill my-skill/ \
   -x "my-skill/evals/*" -x "my-skill/iter-*/*" -x "*__pycache__*"
@@ -237,6 +254,7 @@ cd <root> && zip -r my-skill.skill my-skill/ \
 | 3 | ALWAYS/NEVER caps | Explain reasoning |
 | 4 | No smoke test | Run Step 6 before shipping |
 | 5 | Description summarizes workflow | Triggering conditions ONLY |
+| 6 | No live proof (F-NO-LIVE) | Step 8 prove + verify.sh/tests |
 
 ## Meta-Advice
 
