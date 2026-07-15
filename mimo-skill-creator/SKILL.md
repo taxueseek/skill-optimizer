@@ -6,7 +6,7 @@ description: >
   optimizing skill triggering, or packaging a .skill file.
   Triggers: "create skill", "new skill", "edit skill", "test skill",
   "skill not triggering", "optimize description", "package skill",
-  "prove skill", "skill ship gate".
+  "verify skill", "skill ready to ship".
   NOT for: CLAUDE.md rules, one-off prompts, project conventions.
 ---
 
@@ -130,17 +130,16 @@ Verify baseline differs. Do NOT tell subagent it's being tested.
 
 Improve → re-test → repeat until user satisfied or progress stalls.
 
-### 8. Prove (ship gate)
+### 8. Verify before package
 
 ```bash
 python3 scripts/prove_skill.py <path-to-target-skill>
-python3 scripts/prove_skill.py <path-to-target-skill> --json -o /tmp/prove.json
 python3 scripts/prove_skill.py <path-to-target-skill> --strict
 ```
 
-Ship only when `ship_ready`. Prefer target skill `scripts/verify.sh` or `tests/`.  
-Baseline ratchet: `baseline_gate.py --baseline before.json --current after.json`.  
-See `../references/prove-pipeline.md` and `../references/failure-patterns.md`.
+Same shared gate as other platforms: intent triggers, portable assets, optional automated check.  
+Prefer `scripts/verify.sh` or `tests/` when the skill has code. Compare reports after edits with `baseline_gate.py`.  
+See `../references/verification.md` and `../references/quality-principles.md`.
 
 ## Evaluation Pipeline
 
@@ -237,8 +236,8 @@ Use `task` tool for subagent dispatch, `skill` tool for loading skills.
 ## Packaging
 
 1. Validate frontmatter  
-2. **Prove:** `python3 scripts/prove_skill.py <skill> --strict`  
-3. Package only if ship_ready:
+2. `python3 scripts/prove_skill.py <skill> --strict`  
+3. Package only when verification passes:
 
 ```bash
 cd <root> && zip -r my-skill.skill my-skill/ \
@@ -254,7 +253,7 @@ cd <root> && zip -r my-skill.skill my-skill/ \
 | 3 | ALWAYS/NEVER caps | Explain reasoning |
 | 4 | No smoke test | Run Step 6 before shipping |
 | 5 | Description summarizes workflow | Triggering conditions ONLY |
-| 6 | No live proof (F-NO-LIVE) | Step 8 prove + verify.sh/tests |
+| 6 | No way to re-check after edits | Step 8 + verify.sh/tests |
 
 ## Meta-Advice
 

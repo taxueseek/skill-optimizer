@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Structural + privacy + description audit for any skill folder.
+"""Quality audit for any skill folder.
 
-Ported from session-digger skill-health patterns, generalized for skill-optimizer prove layer.
+Checks are phrased as durable design principles (see quality_principles.py),
+not as a changelog of past incidents.
 
 Usage:
   python3 skill_audit.py <skill-folder>
   python3 skill_audit.py <skill-folder> --json
-  python3 skill_audit.py <skill-folder> --strict   # exit 1 if any error
-
-Does not auto-edit. Prints machine-readable report.
+  python3 skill_audit.py <skill-folder> --strict
 """
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ import re
 import sys
 from pathlib import Path
 
-from failure_patterns import FAILURE_PATTERNS
+from quality_principles import PRINCIPLES
 
 TRIGGER_HINTS = (
     "use when", "triggers", "use for", "fires on", "when the user",
@@ -27,16 +26,18 @@ TRIGGER_HINTS = (
 PLACEHOLDER_RE = re.compile(
     r"\bTODO\b|\bTBD\b|\bFIXME\b|待定|占位|\[Outcome\]|\[TODO\]", re.I
 )
-# Description trap: how-steps in description field
-TRAP_RE = re.compile(
+# Workflow-in-description (model may skip body)
+WORKFLOW_IN_DESC_RE = re.compile(
     r"(write the test first|first .{0,40} then|step ?\d|"
     r"always use|never use|1\. .{5,40} 2\.)",
     re.I,
 )
-# Personal path markers (skill-health style)
 PERSONAL_PATH_RE = re.compile(r"/Users/[A-Za-z0-9._-]+/")
 PERSONAL_HOME_RE = re.compile(r"/home/[A-Za-z0-9._-]+/")
-ALLOW_PATH_MARKERS = ("/Users/<", "/Users/test/", "/Users/joker/", "/Users/alice/", "/home/<", "/home/test/")
+ALLOW_PATH = (
+    "/Users/<", "/Users/test/", "/Users/joker/", "/Users/alice/",
+    "/home/<", "/home/test/",
+)
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str | None]:
@@ -58,10 +59,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str | None]:
                 fields[key] = " ".join(buf).strip().strip("\"'")
             key = m.group(1)
             rest = m.group(2).strip()
-            if rest in (">", "|", ""):
-                buf = []
-            else:
-                buf = [rest]
+            buf = [] if rest in (">", "|", "") else [rest]
         elif key is not None:
             buf.append(line.strip())
     if key:
@@ -69,7 +67,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str | None]:
     return fields, None
 
 
-def scan_hardcodes(skill_dir: Path) -> list[dict]:
+def scan_paths(skill_dir: Path) -> list[dict]:
     hits = []
     watch = ["SKILL.md", "README.md", "CLAUDE.md", "scripts", "references", "agents", "assets"]
     files: list[Path] = []
@@ -88,12 +86,13 @@ def scan_hardcodes(skill_dir: Path) -> list[dict]:
         except OSError:
             continue
         for i, line in enumerate(text.splitlines(), 1):
-            bad = False
             if PERSONAL_PATH_RE.search(line):
-                bad = not any(a in line for a in ALLOW_PATH_MARKERS)
+                if any(a in line for a in ALLOW_PATH):
+                    continue
             elif PERSONAL_HOME_RE.search(line):
-                bad = not any(a in line for a in ALLOW_PATH_MARKERS)
-            if not bad:
+                if any(a in line for a in ALLOW_PATH):
+                    continue
+            else:
                 continue
             safe = PERSONAL_PATH_RE.sub("/Users/<user>/", line.strip())
             safe = PERSONAL_HOME_RE.sub("/home/<user>/", safe)[:160]
@@ -101,7 +100,7 @@ def scan_hardcodes(skill_dir: Path) -> list[dict]:
                 "file": str(p.relative_to(skill_dir)),
                 "line": i,
                 "snippet": safe,
-                "pattern": "F-HARDCODE",
+                "principle": "portable_paths",
             })
     return hits
 
@@ -114,130 +113,133 @@ def audit_skill(skill_dir: Path) -> dict:
 
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.is_file():
-        errors.append({"id": "missing_skill_md", "msg": "SKILL.md missing", "pattern": "A"})
-        return _report(info, errors, warnings, hardcodes=[])
+        errors.append({
+            "id": "missing_skill_md",
+            "msg": "SKILL.md is missing",
+            "principle": "structure_isnt_proof",
+        })
+        return _finish(info, errors, warnings)
 
     text = skill_md.read_text(encoding="utf-8", errors="replace")
     fields, fm_err = parse_frontmatter(text)
     if fm_err:
-        errors.append({"id": "frontmatter", "msg": fm_err, "pattern": "A"})
-    name = fields.get("name", "").strip()
-    desc = fields.get("description", "").strip()
+        errors.append({"id": "frontmatter", "msg": fm_err, "principle": "structure_isnt_proof"})
+
+    name = (fields.get("name") or "").strip()
+    desc = (fields.get("description") or "").strip()
     info["frontmatter_name"] = name
     info["description_len"] = len(desc)
     info["body_lines"] = text.count("\n") + 1
 
     if not name:
-        errors.append({"id": "name_missing", "msg": "frontmatter name missing", "pattern": "A"})
+        errors.append({"id": "name_missing", "msg": "frontmatter name is missing", "principle": "structure_isnt_proof"})
     elif name != skill_dir.name:
         errors.append({
             "id": "name_mismatch",
-            "msg": f"name '{name}' != directory '{skill_dir.name}'",
-            "pattern": "A",
+            "msg": f"name '{name}' does not match directory '{skill_dir.name}'",
+            "principle": "structure_isnt_proof",
         })
     elif not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) or len(name) > 64:
         warnings.append({
             "id": "name_format",
-            "msg": "name should be kebab-case, ≤64 chars",
-            "pattern": "A",
+            "msg": "prefer kebab-case name, at most 64 characters",
+            "principle": "structure_isnt_proof",
         })
 
     if not desc:
-        errors.append({"id": "desc_missing", "msg": "description missing", "pattern": "D"})
+        errors.append({
+            "id": "desc_missing",
+            "msg": "description is missing",
+            "principle": "description_as_gate",
+        })
     else:
         if len(desc) < 40:
-            warnings.append({"id": "desc_short", "msg": "description < 40 chars", "pattern": "D"})
+            warnings.append({
+                "id": "desc_short",
+                "msg": "description is very short; hard to trigger reliably",
+                "principle": "intent_triggers",
+            })
         lower = desc.lower()
         if not any(h in lower for h in TRIGGER_HINTS):
             warnings.append({
                 "id": "desc_no_trigger",
-                "msg": "description lacks clear trigger phrasing (use when / 触发 / …)",
-                "pattern": "D",
+                "msg": "description lacks clear when-to-use language",
+                "principle": "intent_triggers",
             })
-        if TRAP_RE.search(desc):
+        if WORKFLOW_IN_DESC_RE.search(desc):
             errors.append({
-                "id": "description_trap",
-                "msg": "Description Trap: description looks like workflow steps",
-                "pattern": "F-DESC-TRAP",
-            })
-        # Over-broad single-token triggers
-        if re.search(r"\buse when\b.{0,20}\b(test|help|fix|run)\b\s*$", lower):
-            warnings.append({
-                "id": "description_substring_trap",
-                "msg": "possible over-broad trigger word (F-SUBSTR)",
-                "pattern": "F-SUBSTR",
+                "id": "description_as_manual",
+                "msg": "description looks like step-by-step workflow; keep steps in the body",
+                "principle": "description_as_gate",
             })
 
-    # Placeholders in body (outside code fences lightly)
     body = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
-    for m in PLACEHOLDER_RE.finditer(body):
+    if PLACEHOLDER_RE.search(body):
         warnings.append({
             "id": "placeholder",
-            "msg": f"placeholder leftover: {m.group(0)}",
-            "pattern": "A",
+            "msg": "unresolved placeholder left in SKILL.md",
+            "principle": "defaults_dont_mask",
         })
-        break  # one is enough signal
 
-    # Referenced paths
     for m in re.finditer(r"`((?:scripts|references|assets|agents)/[^`\s]+)`", text):
         rel = m.group(1)
         if not (skill_dir / rel).exists():
             warnings.append({
                 "id": "missing_ref",
                 "msg": f"referenced path missing: {rel}",
-                "pattern": "A",
+                "principle": "structure_isnt_proof",
             })
 
     if info["body_lines"] > 650:
         warnings.append({
-            "id": "body_too_long",
-            "msg": f"SKILL.md ~{info['body_lines']} lines; consider references/",
-            "pattern": "C",
+            "id": "body_long",
+            "msg": f"SKILL.md is ~{info['body_lines']} lines; consider progressive disclosure",
+            "principle": "signal_over_noise",
         })
 
-    hardcodes = scan_hardcodes(skill_dir)
-    for h in hardcodes:
+    for h in scan_paths(skill_dir):
         errors.append({
-            "id": "hardcode_paths",
-            "msg": f"{h['file']}:{h['line']} personal path",
-            "pattern": "F-HARDCODE",
+            "id": "personal_path",
+            "msg": f"{h['file']}:{h['line']} uses a machine-specific absolute path",
+            "principle": "portable_paths",
             "detail": h["snippet"],
         })
 
-    # Optional: scripts/ present but no tests or fixtures note
-    if (skill_dir / "scripts").is_dir() and not any(
-        (skill_dir / d).exists() for d in ("tests", "evals", "fixtures", "test-prompts.json")
-    ):
+    has_code = (skill_dir / "scripts").is_dir()
+    has_evidence = any(
+        (skill_dir / d).exists()
+        for d in ("tests", "evals", "fixtures", "test-prompts.json")
+    ) or (skill_dir / "scripts" / "verify.sh").is_file()
+    if has_code and not has_evidence:
         warnings.append({
-            "id": "no_live_assets",
-            "msg": "has scripts/ but no tests|evals|fixtures — prove layer recommended",
-            "pattern": "F-NO-LIVE",
+            "id": "no_automated_check",
+            "msg": "scripts present but no tests/evals/verify — hard to prove changes",
+            "principle": "structure_isnt_proof",
         })
 
-    return _report(info, errors, warnings, hardcodes)
+    return _finish(info, errors, warnings)
 
 
-def _report(info, errors, warnings, hardcodes) -> dict:
-    patterns_hit = sorted({
-        e.get("pattern") for e in errors + warnings if e.get("pattern")
+def _finish(info, errors, warnings) -> dict:
+    principles = sorted({
+        x.get("principle") for x in errors + warnings if x.get("principle")
     })
     return {
         "ok": len(errors) == 0,
         "info": info,
         "errors": errors,
         "warnings": warnings,
-        "hardcode_hits": len(hardcodes),
-        "patterns_hit": patterns_hit,
-        "pattern_catalog_size": len(FAILURE_PATTERNS),
-        "note": "Audit only — no auto-edit. Fix then re-run prove_skill.py",
+        "principles_touched": principles,
+        "principles_available": list(PRINCIPLES.keys()),
+        "note": "Audit only. Fix issues, then re-run prove_skill.py.",
     }
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Audit a skill folder (prove layer)")
+    ap = argparse.ArgumentParser(description="Audit skill quality principles")
     ap.add_argument("skill_folder")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--strict", action="store_true", help="exit 1 on any error")
+    ap.add_argument("--strict", action="store_true")
     args = ap.parse_args()
     skill = Path(args.skill_folder)
     if not skill.is_dir():
@@ -248,20 +250,20 @@ def main() -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         info = report["info"]
-        print(f"skill: {info.get('name')}  body_lines={info.get('body_lines')}")
-        print(f"ok: {report['ok']}  errors={len(report['errors'])}  warnings={len(report['warnings'])}  hardcodes={report['hardcode_hits']}")
+        print(f"skill: {info.get('name')}  lines≈{info.get('body_lines')}")
+        print(
+            f"ok: {report['ok']}  "
+            f"errors={len(report['errors'])}  warnings={len(report['warnings'])}"
+        )
         for e in report["errors"]:
-            print(f"  ERROR [{e.get('pattern')}] {e['msg']}")
+            print(f"  ERROR [{e.get('principle')}] {e['msg']}")
         for w in report["warnings"]:
-            print(f"  WARN  [{w.get('pattern')}] {w['msg']}")
-        if report["patterns_hit"]:
-            print("patterns:", ", ".join(report["patterns_hit"]))
+            print(f"  WARN  [{w.get('principle')}] {w['msg']}")
     if args.strict and not report["ok"]:
         return 1
     return 0
 
 
 if __name__ == "__main__":
-    # Allow running from any cwd
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     raise SystemExit(main())

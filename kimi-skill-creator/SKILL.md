@@ -6,7 +6,7 @@ description: >
   optimizing triggering, or packaging a .skill file.
   Triggers: "create skill", "new skill", "edit skill", "test skill",
   "skill not triggering", "optimize description", "package skill",
-  "SKILL.md", "whenToUse", "prove skill", "skill ship gate".
+  "SKILL.md", "whenToUse", "verify skill", "skill ready to ship".
   NOT for: AGENTS.md rules, one-off prompts, project conventions.
 ---
 
@@ -145,19 +145,17 @@ Verify baseline differs. Do NOT tell subagent it's being tested. Use `AgentSwarm
 
 Improve → re-test → repeat until user satisfied or progress stalls.
 
-### 8. Prove (ship gate)
+### 8. Verify before package
 
 ```bash
 # skill-optimizer 仓库根目录
 python3 scripts/prove_skill.py <path-to-target-skill>
-python3 scripts/prove_skill.py <path-to-target-skill> --json -o /tmp/prove.json
 python3 scripts/prove_skill.py <path-to-target-skill> --strict
 ```
 
-- `ship_ready` 才允许打包；live 跳过则只能标 dry_run（F-NO-LIVE）
-- 改动前后：`baseline_gate.py --baseline before.json --current after.json`
-- 目标 skill 优先提供 `scripts/verify.sh` 或 `tests/`
-- 详见 `../references/prove-pipeline.md`、`../references/failure-patterns.md`
+检查的是通用质量原则：触发是否像意图、description 是否只做门控、路径是否可移植、有没有可重复的自动检查。  
+有脚本的 skill 优先提供 `scripts/verify.sh` 或 `tests/`；改动前后可用 `baseline_gate.py` 对比报告。  
+详见 `../references/verification.md`、`../references/quality-principles.md`。
 
 ## Evaluation Pipeline
 
@@ -252,8 +250,8 @@ P0 (blocking) → P1 (noticeable) → P2 (nice).
 ## Packaging
 
 1. Validate frontmatter (name, description, whenToUse)
-2. **Prove:** `python3 scripts/prove_skill.py <skill> --strict`
-3. Package only if ship_ready:
+2. `python3 scripts/prove_skill.py <skill> --strict`
+3. Package only when verification passes:
 
 ```bash
 cd <root> && zip -r my-skill.skill my-skill/ \
@@ -269,7 +267,7 @@ cd <root> && zip -r my-skill.skill my-skill/ \
 | 3 | ALWAYS/NEVER caps | Explain reasoning |
 | 4 | No smoke test | Run Step 6 before shipping |
 | 5 | Description summarizes workflow | Triggering conditions ONLY |
-| 6 | No live proof (F-NO-LIVE) | Step 8 prove + verify.sh/tests |
+| 6 | No way to re-check after edits | Step 8 + verify.sh/tests |
 
 ## Meta-Advice
 

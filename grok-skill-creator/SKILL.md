@@ -6,7 +6,7 @@ description: >
   optimizing skill triggering, benchmarking performance, or packaging a .skill file.
   Triggers: "create skill", "new skill", "edit skill", "test skill",
   "skill not triggering", "optimize description", "package skill", "benchmark skill",
-  "prove skill", "skill ship gate", "live verify skill".
+  "verify skill", "skill ready to ship", "skill quality check".
   NOT for: CLAUDE.md rules, one-off prompts, project conventions.
 ---
 
@@ -125,35 +125,33 @@ Spawn 2 subagents — one WITH skill, one WITHOUT. Verify baseline differs. Do N
 
 Improve → re-test → repeat until user satisfied or progress stalls.
 
-### 8. Prove (ship gate — always before package)
+### 8. Verify before package
 
-Green smoke ≠ proven. Run the **shared prove layer** (session-digger engineering practice):
+Structure can look fine while the skill still fails users. Before packaging, run the shared verification gate:
 
 ```bash
-# From skill-optimizer repo root (or set SKILL_OPTIMIZER_ROOT)
+# From skill-optimizer repo root
 python3 scripts/prove_skill.py <path-to-target-skill>
-python3 scripts/prove_skill.py <path-to-target-skill> --json -o /tmp/prove.json
-python3 scripts/prove_skill.py <path-to-target-skill> --strict   # CI: exit 1 if not ship_ready
+python3 scripts/prove_skill.py <path-to-target-skill> --strict
 ```
 
-**Policy:**
+**What it checks (principles, not one-off bugs):**
 
-| Result | Action |
-|--------|--------|
-| `ship_ready: true` + live not skipped | Package / install OK |
-| `ship_ready: true` but live skipped | Ship only if user accepts **dry_run**; file F-NO-LIVE |
-| blockers present | Fix → re-prove; do not package |
+- Trigger language and description-as-gate (not a full manual in frontmatter)
+- Name / paths / missing references
+- Portability (no machine-locked absolute paths)
+- Automated check if the skill provides `scripts/verify.sh` or `tests/`
 
-**Baseline ratchet** (after a change):
+**After meaningful edits**, save a report, change, re-run, and compare:
 
 ```bash
 python3 scripts/prove_skill.py <skill> --json -o /tmp/before.json
-# ... edit skill ...
+# edit...
 python3 scripts/prove_skill.py <skill> --json -o /tmp/after.json
 python3 scripts/baseline_gate.py --baseline /tmp/before.json --current /tmp/after.json
 ```
 
-Target skills should prefer `scripts/verify.sh` (exit 0 on real checks) or `tests/`. See `../references/prove-pipeline.md` and `../references/failure-patterns.md`.
+Details: `../references/verification.md`, `../references/quality-principles.md`.
 
 ## Evaluation Pipeline
 
@@ -261,9 +259,9 @@ P0 (blocking) → P1 (noticeable) → P2 (nice). Fix functional first.
 
 ## Packaging
 
-1. Validate: `python scripts/quick_validate.py <skill-folder>`
-2. **Prove:** `python3 ../scripts/prove_skill.py <skill-folder> --strict` (from this creator dir, or use repo-root path)
-3. Package only if ship_ready:
+1. `python scripts/quick_validate.py <skill-folder>`
+2. `python3 scripts/prove_skill.py <skill-folder> --strict` (repo root)
+3. Package only when verification passes:
 
 ```bash
 cd <skill-dir>/.. && zip -r <name>.skill <name>/ \
@@ -271,7 +269,7 @@ cd <skill-dir>/.. && zip -r <name>.skill <name>/ \
   -x "<name>/workspace/*" -x "*__pycache__*" -x "*.DS_Store"
 ```
 
-Generate `<name>-summary.md`: description, when to use, file structure, usage (`/<name>`), requirements. Note prove claims (live vs dry_run).
+Generate `<name>-summary.md`: description, when to use, structure, usage.
 
 ## 5 Common Failures
 
@@ -282,7 +280,7 @@ Generate `<name>-summary.md`: description, when to use, file structure, usage (`
 | 3 | ALWAYS/NEVER caps | Explain reasoning |
 | 4 | No smoke test before shipping | Run Step 6 |
 | 5 | Description summarizes workflow | Triggering conditions ONLY |
-| 6 | No live proof (F-NO-LIVE) | Step 8 prove + `scripts/verify.sh` or tests |
+| 6 | No way to re-check after edits | Step 8 + `scripts/verify.sh` or tests |
 
 ## Reference Files
 
@@ -292,9 +290,9 @@ Generate `<name>-summary.md`: description, when to use, file structure, usage (`
 - `references/schemas.md` — JSON structures (evals, grading, benchmark)
 - `scripts/aggregate_benchmark.py` — benchmark aggregation
 - `scripts/quick_validate.py` — pre-packaging validation
-- `../scripts/prove_skill.py` — **ship gate** (audit + live)
-- `../references/prove-pipeline.md` — prove policy
-- `../references/failure-patterns.md` — F-* pattern catalog
+- `../scripts/prove_skill.py` — verification gate
+- `../references/verification.md` — how verification fits the loop
+- `../references/quality-principles.md` — durable design principles
 
 ## Meta-Advice
 

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Live / fixture replay helpers for the prove layer.
+"""Run the skill's own automated check, if it declares one.
 
-Does NOT invent agent behavior. Runs what the skill itself declares:
-
-1. If ``scripts/verify.sh`` or ``scripts/prove.sh`` exists → run it
-2. Else if ``package.json`` / ``pyproject`` with known test cmds → optional
-3. Else if ``evals/`` or ``test-prompts.json`` or ``tests/`` exists → report presence
-4. Else → status=skipped (must dry_run smoke via agent)
+Order:
+  1. scripts/verify.sh or scripts/prove.sh
+  2. pytest under tests/
+  3. else skip (agent smoke remains the owner's responsibility)
 
 Usage:
   python3 live_replay.py <skill-folder>
@@ -58,48 +56,51 @@ def replay(skill_dir: Path) -> dict:
         "runs": [],
         "assets": {},
     }
-
     assets = {
         "verify_sh": (skill_dir / "scripts" / "verify.sh").is_file(),
         "prove_sh": (skill_dir / "scripts" / "prove.sh").is_file(),
         "tests_dir": (skill_dir / "tests").is_dir(),
         "evals_dir": (skill_dir / "evals").is_dir(),
         "test_prompts": (skill_dir / "test-prompts.json").is_file(),
-        "pytest": any((skill_dir / "tests").glob("test_*.py")) if (skill_dir / "tests").is_dir() else False,
+        "pytest": (
+            any((skill_dir / "tests").glob("test_*.py"))
+            if (skill_dir / "tests").is_dir()
+            else False
+        ),
     }
     result["assets"] = assets
 
-    # Prefer explicit prove/verify scripts
     for name in ("prove.sh", "verify.sh"):
         script = skill_dir / "scripts" / name
-        if script.is_file():
-            result["mode"] = name
-            # make executable best-effort
-            try:
-                script.chmod(script.stat().st_mode | 0o111)
-            except OSError:
-                pass
-            run = _run(["bash", str(script)], skill_dir)
-            result["runs"].append(run)
-            result["ok"] = run.get("ok", False)
-            return result
-
-    # Pytest if present
-    if assets["pytest"]:
-        result["mode"] = "pytest"
-        run = _run([sys.executable, "-m", "pytest", "tests/", "-q", "--tb=line"], skill_dir)
+        if not script.is_file():
+            continue
+        result["mode"] = name
+        try:
+            script.chmod(script.stat().st_mode | 0o111)
+        except OSError:
+            pass
+        run = _run(["bash", str(script)], skill_dir)
         result["runs"].append(run)
         result["ok"] = run.get("ok", False)
         return result
 
-    # Presence-only: evals / test-prompts mean agent smoke is required
+    if assets["pytest"]:
+        result["mode"] = "pytest"
+        run = _run(
+            [sys.executable, "-m", "pytest", "tests/", "-q", "--tb=line"],
+            skill_dir,
+        )
+        result["runs"].append(run)
+        result["ok"] = run.get("ok", False)
+        return result
+
     if assets["evals_dir"] or assets["test_prompts"] or assets["tests_dir"]:
-        result["mode"] = "assets_only"
+        result["mode"] = "manual_eval_assets"
         result["skipped"] = True
-        result["ok"] = True  # structural OK; agent must run smoke separately
+        result["ok"] = True
         result["message"] = (
-            "Fixtures/evals present but no scripts/verify.sh — "
-            "run agent smoke (with-skill vs baseline) before ship"
+            "Eval assets exist but no verify.sh/pytest entrypoint — "
+            "run agent smoke (with skill vs without) and keep notes"
         )
         return result
 
@@ -107,8 +108,8 @@ def replay(skill_dir: Path) -> dict:
     result["skipped"] = True
     result["ok"] = True
     result["message"] = (
-        "No verify script or tests — mark as dry_run only; "
-        "do not claim live proof (F-NO-LIVE)"
+        "No automated check declared — structural audit only; "
+        "prefer adding scripts/verify.sh or tests/ for future changes"
     )
     return result
 
@@ -129,8 +130,6 @@ def main() -> int:
         print(f"mode={rep['mode']} ok={rep['ok']} skipped={rep['skipped']}")
         if rep.get("message"):
             print(rep["message"])
-        for r in rep.get("runs") or []:
-            print(f"  exit={r.get('exit_code')} cmd={r.get('cmd')}")
     return 0 if rep.get("ok") else 1
 
 

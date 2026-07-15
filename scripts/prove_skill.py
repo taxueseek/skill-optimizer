@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-"""Prove layer orchestrator — skill-optimizer.
+"""Skill verification gate for skill-optimizer.
 
-Combines structural audit + live/fixture replay into one ship gate.
-Distilled from session-digger engineering practice:
-  freeze baseline → measure → change → re-measure → gate.
+Answers one question: is this skill ready to ship *with evidence*?
+
+  structure + portability audit
+  + automated check if the skill provides one (verify script / tests)
+  = ship recommendation
+
+Not a catalog of old bugs — a reusable quality bar.
 
 Usage:
   python3 prove_skill.py <skill-folder>
   python3 prove_skill.py <skill-folder> --json
-  python3 prove_skill.py <skill-folder> --json > prove-report.json
   python3 prove_skill.py <skill-folder> --strict
-
-Exit codes:
-  0 — ship_ready (or soft pass with warnings only when not --strict live)
-  1 — blocked (errors or failed live)
-  2 — bad args
 """
 from __future__ import annotations
 
@@ -24,7 +22,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# local imports
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from skill_audit import audit_skill  # noqa: E402
 from live_replay import replay  # noqa: E402
@@ -35,78 +32,76 @@ def prove(skill_dir: Path) -> dict:
     audit = audit_skill(skill_dir)
     live = replay(skill_dir)
 
-    errors = audit.get("errors") or []
-    warnings = audit.get("warnings") or []
-
-    # Ship policy (digger-style: green CI is not enough, but empty live is allowed if declared)
+    errors = list(audit.get("errors") or [])
+    warnings = list(audit.get("warnings") or [])
+    audit_ok = bool(audit.get("ok"))
     live_ok = bool(live.get("ok"))
     live_skipped = bool(live.get("skipped"))
-    audit_ok = bool(audit.get("ok"))
 
     ship_ready = audit_ok and live_ok
-    # If live skipped with no verify assets, still allow ship only when audit clean —
-    # but flag F-NO-LIVE so humans don't over-claim.
-    claims = []
+    evidence = []
     if ship_ready and not live_skipped:
-        claims.append("live_or_automated_verify_passed")
+        evidence.append("automated_check_passed")
     if ship_ready and live_skipped:
-        claims.append("audit_clean_but_live_skipped_dry_run_only")
-        warnings = list(warnings) + [{
-            "id": "live_skipped",
-            "msg": live.get("message") or "live replay skipped",
-            "pattern": "F-NO-LIVE",
-        }]
+        evidence.append("structure_ok_no_automated_check")
+        warnings.append({
+            "id": "evidence_limited",
+            "msg": (
+                live.get("message")
+                or "No verify script or tests — treat as structural pass only"
+            ),
+            "principle": "structure_isnt_proof",
+        })
 
     blockers = [e["msg"] for e in errors]
     if not live_ok and not live_skipped:
-        blockers.append("live_replay_failed")
+        blockers.append("automated check failed")
 
     return {
-        "version": "1.0",
+        "version": "1.1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "skill_dir": str(skill_dir),
         "skill_name": skill_dir.name,
         "ok": audit_ok and live_ok,
-        "ship_ready": ship_ready and len(errors) == 0,
+        "ship_ready": ship_ready and not errors,
         "blockers": blockers,
-        "claims": claims,
+        "evidence": evidence,
         "audit": audit,
         "live": live,
-        "next_actions": _next_actions(errors, warnings, live),
+        "next_actions": _next(errors, warnings, live),
         "note": (
-            "Prove layer does not edit the skill. "
-            "Fix blockers, re-run, optional: baseline_gate.py --baseline old.json --current new.json"
+            "Does not modify the skill. "
+            "Optional: baseline_gate.py to compare two prove reports."
         ),
     }
 
 
-def _next_actions(errors, warnings, live) -> list[str]:
-    actions = []
+def _next(errors, warnings, live) -> list[str]:
+    out = []
     for e in errors[:5]:
-        actions.append(f"Fix ERROR [{e.get('pattern')}]: {e['msg']}")
+        out.append(e["msg"])
     if not live.get("ok") and not live.get("skipped"):
-        actions.append("Fix failing scripts/verify.sh or tests/")
+        out.append("Fix the failing verify script or test suite")
     if live.get("skipped") and live.get("mode") == "none":
-        actions.append(
-            "Add scripts/verify.sh (or tests/) for live proof, "
-            "or run agent smoke with-skill vs baseline and attach evidence"
+        out.append(
+            "Add scripts/verify.sh or tests/ so changes can be proven automatically; "
+            "or keep a short smoke protocol (with-skill vs without) for agent-only skills"
         )
-    for w in warnings[:3]:
-        if w.get("pattern") == "F-DESC-TRAP":
-            actions.append("Rewrite description to triggering conditions only")
-        elif w.get("pattern") == "F-HARDCODE":
-            actions.append("Replace personal paths with $HOME / placeholders")
-    if not actions:
-        actions.append("Optional: freeze this report as baseline for next change")
-    return actions
+    for w in warnings:
+        if w.get("principle") == "description_as_gate":
+            out.append("Rewrite description as when-to-use only; move steps into the body")
+            break
+    if not out:
+        out.append("Optional: save this report and re-run after the next edit")
+    return out
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Prove a skill is ship-ready")
+    ap = argparse.ArgumentParser(description="Verify a skill is ready to ship")
     ap.add_argument("skill_folder")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--strict", action="store_true", help="exit 1 if not ship_ready")
-    ap.add_argument("-o", "--output", help="write JSON report to file")
+    ap.add_argument("--strict", action="store_true")
+    ap.add_argument("-o", "--output")
     args = ap.parse_args()
     skill = Path(args.skill_folder)
     if not skill.is_dir():
@@ -114,36 +109,37 @@ def main() -> int:
         return 2
 
     report = prove(skill)
-
     if args.output:
         Path(args.output).write_text(
-            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"=== prove: {report['skill_name']} ===")
+        print(f"=== verify: {report['skill_name']} ===")
         print(f"ship_ready: {report['ship_ready']}")
-        print(f"audit ok: {report['audit']['ok']}  "
-              f"errors={len(report['audit']['errors'])}  "
-              f"warnings={len(report['audit']['warnings'])}")
+        a = report["audit"]
+        print(
+            f"structure: ok={a['ok']}  "
+            f"errors={len(a['errors'])}  warnings={len(a['warnings'])}"
+        )
         live = report["live"]
-        print(f"live mode: {live.get('mode')}  ok={live.get('ok')}  skipped={live.get('skipped')}")
+        print(
+            f"check: mode={live.get('mode')}  "
+            f"ok={live.get('ok')}  skipped={live.get('skipped')}"
+        )
         if report["blockers"]:
             print("blockers:")
             for b in report["blockers"]:
                 print(f"  - {b}")
         print("next:")
-        for a in report["next_actions"]:
-            print(f"  → {a}")
-        if report["claims"]:
-            print("claims:", ", ".join(report["claims"]))
+        for step in report["next_actions"]:
+            print(f"  → {step}")
+        if report["evidence"]:
+            print("evidence:", ", ".join(report["evidence"]))
 
     if args.strict and not report["ship_ready"]:
-        return 1
-    if not report["ok"] and args.strict:
         return 1
     return 0
 

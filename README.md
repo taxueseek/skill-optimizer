@@ -4,20 +4,18 @@
 
 一套跨平台的 **Skill 设计、测试、优化工具包**。包含三个平台专用版本：
 
-**最新更新：v1.1.0 — Prove 层**
+**最新更新：v1.1.1 — 共享验证门**
 
-**v1.1.0**：共享 **Prove 发版门**（来自 session-digger 工程实践）：`scripts/prove_skill.py` = 结构审计 + 活体/夹具回放 + ship_ready；Failure Pattern 库（F-SUBSTR / F-HARDCODE / F-NO-LIVE…）；`baseline_gate.py` 防回归。三平台 creator 均增加 **Step 8 Prove**，打包前必须过门。
-
-**v1.02**：kimi-skill-creator；Description Trap；7 步评估 Pipeline 等。
+在「写好 + 测过」之后，增加一层跨平台的**质量验证**：结构是否站得住、触发描述是否只做门控、资产是否可移植、有没有可重复的自动检查。三平台 creator 在打包前共用同一套脚本与原则——学的是可迁移的工程习惯，不是某次项目的事故清单。
 
 | 版本 | 目录 | 平台 | 特色 |
 |------|------|------|------|
-| **grok-skill-creator** | `grok-skill-creator/` | Grok Build | 紧凑方法论 + 评估流水线 + Prove |
-| **kimi-skill-creator** | `kimi-skill-creator/` | Kimi Code | AgentSwarm + whenToUse + Prove |
-| **mimo-skill-creator** | `mimo-skill-creator/` | MiMo Code | TDD / compose + Prove |
-| **shared prove** | `scripts/` + `references/` | 全平台 | audit · live · baseline_gate |
+| **grok-skill-creator** | `grok-skill-creator/` | Grok Build | 方法论 + 评估 + 验证 |
+| **kimi-skill-creator** | `kimi-skill-creator/` | Kimi Code | AgentSwarm + whenToUse + 验证 |
+| **mimo-skill-creator** | `mimo-skill-creator/` | MiMo Code | TDD / compose + 验证 |
+| **shared verification** | `scripts/` + `references/` | 全平台 | audit · check · baseline |
 
-核心闭环：**Three Gates → Write → Smoke → Eval → Optimize → Prove → Package**。
+核心闭环：**Three Gates → Write → Smoke → Eval → Optimize → Verify → Package**。
 
 ---
 
@@ -70,45 +68,38 @@ Three Gates（该不该写）
 ```
 创建测试用例（10-20 个，7:2:1 比例）
     → 并行跑 with-skill + baseline
-        → 评分（grading.json）
-            → 聚合对比（benchmark.json）
-                → 分析模式（analyzer）
-                    → Prove 发版门（audit + live）
-                    → 改进 → 下一轮
+        → 评分 → 聚合 → 改进
+            → 共享验证门（结构 + 可重复检查）
+                → 打包
 ```
 
-### Prove 发版门（v1.1，共享）
+### 共享验证门（三平台共用）
 
-结构看着对 ≠ 行为对。打包前：
+好看的目录结构不能代替「改完还能证明它好用」。打包前：
 
 ```bash
 cd /path/to/skill-optimizer
 
-# 对人：终端摘要
 python3 scripts/prove_skill.py /path/to/your-skill
-
-# 对 CI / 棘轮：JSON + 严格门
-python3 scripts/prove_skill.py /path/to/your-skill --json -o /tmp/prove.json
 python3 scripts/prove_skill.py /path/to/your-skill --strict
 
-# 改动前后对比（拒绝变差）
+# 重要改动前后对比
 python3 scripts/prove_skill.py /path/to/your-skill --json -o /tmp/before.json
-# ... 编辑 skill ...
+# ... 编辑 ...
 python3 scripts/prove_skill.py /path/to/your-skill --json -o /tmp/after.json
 python3 scripts/baseline_gate.py --baseline /tmp/before.json --current /tmp/after.json
 ```
 
-| 脚本 | 作用 |
-|------|------|
-| `scripts/skill_audit.py` | 结构 / description trap / 硬编码路径 |
-| `scripts/live_replay.py` | 跑 `scripts/verify.sh` 或 pytest |
-| `scripts/prove_skill.py` | 合并审计 + 活体 → `ship_ready` |
-| `scripts/baseline_gate.py` | 基线棘轮 |
-| `scripts/failure_patterns.py` | F-* 模式目录 |
-| `references/prove-pipeline.md` | 政策说明 |
-| `references/failure-patterns.md` | 模式手册 |
+| 脚本 / 文档 | 作用 |
+|-------------|------|
+| `scripts/prove_skill.py` | 一键验证：结构审计 + 自动检查 |
+| `scripts/skill_audit.py` | 触发描述、路径可移植性、引用完整性 |
+| `scripts/live_replay.py` | 运行 skill 自带的 verify/tests |
+| `scripts/baseline_gate.py` | 对比两份报告，避免改坏 |
+| `references/quality-principles.md` | 可迁移的设计原则 |
+| `references/verification.md` | 验证在整条流水线中的位置 |
 
-目标 skill 建议提供 `scripts/verify.sh`（真实检查 exit 0）或 `tests/`。无夹具时 prove 可过 audit，但会标 **F-NO-LIVE / dry_run**。
+有代码的 skill 建议提供 `scripts/verify.sh` 或 `tests/`。纯说明型 skill 仍可过结构检查，并诚实标明证据有限。
 
 ---
 
